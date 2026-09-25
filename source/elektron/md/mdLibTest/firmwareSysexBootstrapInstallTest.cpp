@@ -89,6 +89,12 @@ int main()
 
 	uint64_t programWords = 0;
 	uint64_t eraseSectors = 0;
+	std::vector<uint8_t> panelTx;
+	uc->setPanelTransmitTap([&](const uint8_t byte)
+	{
+		if(panelTx.size() < 256)
+			panelTx.push_back(byte);
+	});
 	uc->setFlashOperationObserver([&](const md::FlashCommandDecoder::Operation& op,
 		const uint64_t)
 	{
@@ -130,7 +136,13 @@ int main()
 	std::cerr << "[install] early-menu probe pc=0x" << std::hex << uc->getPC()
 		<< std::dec
 		<< " panelQueued=" << (md::Sim::g_uartRxCapacity - uc->availablePanelRxBytes())
+		<< " panelTxCount=" << panelTx.size()
 		<< std::endl;
+	std::cerr << "[install] panelTx:";
+	for(const auto byte : panelTx)
+		std::cerr << " " << std::hex << std::setw(2) << std::setfill('0')
+			<< static_cast<unsigned>(byte);
+	std::cerr << std::dec << std::endl;
 	for(int rel = -16; rel <= 32; rel += 2)
 	{
 		const auto addr = static_cast<uint32_t>(uc->getPC() + rel);
