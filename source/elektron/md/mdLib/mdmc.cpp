@@ -171,6 +171,36 @@ namespace md
 		return true;
 	}
 
+	std::vector<uint8_t> Microcontroller::copyLoaderRam() const
+	{
+		return m_loaderRam;
+	}
+
+	bool Microcontroller::replaceLoaderRam(const std::vector<uint8_t>& _data)
+	{
+		if(_data.size() != m_loaderRam.size())
+			return false;
+		m_loaderRam = _data;
+		m_immPageAddress = 0xffffffffu;
+		m_immPageData = nullptr;
+		return true;
+	}
+
+	std::vector<uint8_t> Microcontroller::copyInternalSram() const
+	{
+		return m_internalSram;
+	}
+
+	bool Microcontroller::replaceInternalSram(const std::vector<uint8_t>& _data)
+	{
+		if(_data.size() != m_internalSram.size())
+			return false;
+		m_internalSram = _data;
+		m_immPageAddress = 0xffffffffu;
+		m_immPageData = nullptr;
+		return true;
+	}
+
 	bool Microcontroller::replacePatchRam(const std::vector<uint8_t>& _data)
 	{
 		if(_data.size() != m_patchRam.size())
