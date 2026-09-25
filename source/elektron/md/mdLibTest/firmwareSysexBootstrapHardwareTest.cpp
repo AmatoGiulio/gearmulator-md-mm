@@ -253,6 +253,18 @@ int main()
 	};
 	const bool mainOsPrefixMatch = mainImmediately.size() >= image.mainOs.size()
 		&& std::equal(image.mainOs.begin(), image.mainOs.end(), mainImmediately.begin());
+	const auto findOffset = [](const std::vector<uint8_t>& haystack,
+		const std::vector<uint8_t>& needle) -> int64_t
+	{
+		if(needle.empty() || needle.size() > haystack.size())
+			return -1;
+		const auto it = std::search(haystack.begin(), haystack.end(),
+			needle.begin(), needle.end());
+		return it == haystack.end() ? -1
+			: static_cast<int64_t>(std::distance(haystack.begin(), it));
+	};
+	const auto mainOsOffset = findOffset(mainImmediately, image.mainOs);
+	const auto decodedTransportOffset = findOffset(mainImmediately, image.decodedTransport);
 	uint64_t immediateFlashFnv = 14695981039346656037ull;
 	for(const auto byte : flashImmediately)
 	{
@@ -264,6 +276,9 @@ int main()
 		<< " changedPatch=" << changedBytes(patchBeforeUpdate, patchImmediately)
 		<< " changedMain=" << changedBytes(mainBeforeUpdate, mainImmediately)
 		<< " mainOsPrefixMatch=" << mainOsPrefixMatch
+		<< " mainOsOffset=" << mainOsOffset
+		<< " decodedTransportOffset=" << decodedTransportOffset
+		<< " decodedTransportSize=" << image.decodedTransport.size()
 		<< " programWords=" << programWords
 		<< " eraseSectors=" << eraseSectors
 		<< std::endl;
@@ -275,6 +290,74 @@ int main()
 	// accepted and where its decoded image lives.
 	const bool bootstrapRestarted = md::memorymap::g_flashLow.contains(uc.getPC());
 	std::cerr << "[hw-bootstrap] bootstrapRestarted=" << bootstrapRestarted << std::endl;
+
+	if(bootstrapRestarted)
+	{
+		// The real updater has crossed a warm-reboot boundary while retaining external
+		// main RAM. Rebuild the whole machine so DSP1/DSP2 start from reset too, then
+		// restore the retained RAM before restarting the ColdFire bootstrap.
+		std::cerr << "[hw-bootstrap] phase3 fresh-machine warm reboot with retained MAIN RAM" << std::endl;
+		hw.reset();
+
+		auto rebooted = std::make_unique<md::Hardware>(
+			flashImmediately, "md-os163-updater-warm-reboot",
+			md::MachineModel::Machinedrum,
+			patchImmediately,
+			std::shared_ptr<md::FrontPanelPublisher>{},
+			flashImmediately,
+			std::vector<uint8_t>{},
+			md::FlashSectorOverlay{},
+			std::vector<uint8_t>{},
+			std::vector<uint8_t>{0});
+		if(!rebooted->isValid() || !rebooted->getUC().replaceMainRam(mainImmediately))
+		{
+			std::cerr << "[hw-bootstrap] failed to rebuild warm-reboot machine" << std::endl;
+			return 8;
+		}
+
+		auto& rebootUc = rebooted->getUC();
+		uint64_t rebootProgramWords = 0;
+		uint64_t rebootEraseSectors = 0;
+		rebootUc.setFlashOperationObserver([&](const md::FlashCommandDecoder::Operation& op,
+			const uint64_t)
+		{
+			if(op.type == md::FlashCommandDecoder::Operation::Type::ProgramWord)
+				++rebootProgramWords;
+			else if(op.type == md::FlashCommandDecoder::Operation::Type::EraseSector)
+				++rebootEraseSectors;
+		});
+
+		rebootUc.reset();
+		rebootUc.exec();
+		for(unsigned second = 1; second <= 5; ++second)
+		{
+			rebooted->advance(44100);
+			std::cerr << "[hw-bootstrap] warm-reboot " << second << "s"
+				<< " pc=0x" << std::hex << rebootUc.getPC() << std::dec
+				<< " dsp1=" << rebooted->getDspMixer().booted()
+				<< " dsp2=" << rebooted->getDspProducer().booted()
+				<< " panel=" << rebootUc.isPanelHandshakeComplete()
+				<< " programWords=" << rebootProgramWords
+				<< " eraseSectors=" << rebootEraseSectors
+				<< std::endl;
+			if(rebootProgramWords || rebootEraseSectors)
+				break;
+		}
+
+		const auto rebootFlash = rebootUc.copyFlashData();
+		uint64_t rebootFnv = 14695981039346656037ull;
+		for(const auto byte : rebootFlash)
+		{
+			rebootFnv ^= byte;
+			rebootFnv *= 1099511628211ull;
+		}
+		std::cerr << "[hw-bootstrap] warm-reboot flashFnv=0x" << std::hex << rebootFnv
+			<< " canonical=0x" << md::g_mdOs163Fingerprint << std::dec
+			<< " canonicalImage=" << (rebootFnv == md::g_mdOs163Fingerprint)
+			<< " programWords=" << rebootProgramWords
+			<< " eraseSectors=" << rebootEraseSectors
+			<< std::endl;
+	}
 
 	std::cerr << "[hw-bootstrap] midiTx captured=" << midiTx.size()
 		<< " total=" << midiTxTotal << " bytes:";
