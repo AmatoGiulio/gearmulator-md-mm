@@ -74,6 +74,10 @@ namespace md
 		uint32_t getResetPC() override;
 		uint32_t getResetSP() override;
 
+		// Stage a decoded RAM-linked MAIN OS before reset. This is used only by
+		// the official-updater direct-boot path; normal canonical-ROM boot is unchanged.
+		bool stageDirectBootMainOs(const std::vector<uint8_t>& _mainOs);
+
 		// ColdFire-facing HI08 register files for the two DSPs. The Hardware owns the
 		// md::Dsp wrappers and registers their boot/bridge callbacks on these; the
 		// Microcontroller just maps them into the address space (0x500000 / 0x600000).
