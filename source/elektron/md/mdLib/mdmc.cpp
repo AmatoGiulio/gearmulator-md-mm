@@ -138,6 +138,18 @@ namespace md
 			m_patchRam = _initialPatchRam;
 	}
 
+	bool Microcontroller::stageDirectBootMainOs(const std::vector<uint8_t>& mainOs)
+	{
+		if(m_model != MachineModel::Machinedrum || mainOs.empty()
+			|| mainOs.size() > m_mainRam.size())
+			return false;
+		std::fill(m_mainRam.begin(), m_mainRam.end(), 0);
+		std::copy(mainOs.begin(), mainOs.end(), m_mainRam.begin());
+		m_immPageAddress = 0xffffffffu;
+		m_immPageData = nullptr;
+		return true;
+	}
+
 	std::vector<uint8_t> Microcontroller::copyPatchRam() const
 	{
 		std::shared_lock lock(m_patchRamMutex);
