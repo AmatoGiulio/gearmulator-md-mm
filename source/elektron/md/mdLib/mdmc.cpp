@@ -350,6 +350,8 @@ namespace md
 
 	void Microcontroller::onPanelTransmit(const uint8_t _byte)
 	{
+		if(m_panelTransmitTap)
+			m_panelTransmitTap(_byte);
 		// Minimal Monomachine panel handshake. Firmware disassembly establishes
 		// the 0xcc autobaud response; 0x23,0x01 is the compatible descriptor used
 		// by the earlier private bring-up implementation.
