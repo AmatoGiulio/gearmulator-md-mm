@@ -96,10 +96,18 @@ int main()
 
 	auto& uc = hw->getUC();
 	std::vector<uint8_t> panelTx;
+	std::vector<uint8_t> midiTx;
+	uint64_t midiTxTotal = 0;
 	uc.setPanelTransmitTap([&](const uint8_t byte)
 	{
-		if(panelTx.size() < 256)
+		if(panelTx.size() < 4096)
 			panelTx.push_back(byte);
+	});
+	uc.setMidiTransmitTap([&](const uint8_t byte)
+	{
+		++midiTxTotal;
+		if(midiTx.size() < 4096)
+			midiTx.push_back(byte);
 	});
 
 	const auto function = md::panelPacket(md::MachineModel::Machinedrum,
@@ -141,10 +149,15 @@ int main()
 	// Start the real transfer at byte zero and keep every firmware packet intact.
 	report(*hw, "MIDI UPGRADE ready");
 
-	// Feed the official updater one complete SysEx message at a time. Waiting for
-	// UART1 RX to drain before admitting the next message preserves protocol
-	// boundaries without forcing the ~9 minute physical DIN baud rate into this
-	// headless test.
+	// Feed the official updater with a maximum of two pending UART1 bytes.
+	// Sim::rx is a host-side scheduling backlog, but USR currently reports FFULL
+	// when that backlog reaches three bytes. Queuing an entire 112-byte firmware
+	// packet therefore exposes an artificial physical-FIFO-full condition to the
+	// bootstrap. Keep the backlog below the 3-byte hardware FIFO threshold while
+	// retaining accelerated (non-wall-clock) delivery.
+	panelTx.clear();
+	midiTx.clear();
+	midiTxTotal = 0;
 	uint64_t programWords = 0;
 	uint64_t eraseSectors = 0;
 	uc.setFlashOperationObserver([&](const md::FlashCommandDecoder::Operation& op,
@@ -169,16 +182,23 @@ int main()
 		}
 		const auto end = static_cast<size_t>(eox - sysex.begin()) + 1;
 
-		for(; cursor < end; ++cursor)
-		{
-			if(!uc.tryQueueMidiRx(sysex[cursor]))
-			{
-				std::cerr << "[hw-bootstrap] UART1 RX full at byte " << cursor << std::endl;
-				return 6;
-			}
-		}
-
 		uint32_t frames = 0;
+		while(cursor < end)
+		{
+			while(cursor < end && uc.queuedMidiRxBytes() < 2)
+			{
+				if(!uc.tryQueueMidiRx(sysex[cursor]))
+				{
+					std::cerr << "[hw-bootstrap] UART1 RX full at byte " << cursor << std::endl;
+					return 6;
+				}
+				++cursor;
+			}
+			hw->advance(1);
+			++frames;
+			if(frames >= maxDrainFramesPerMessage && uc.queuedMidiRxBytes() != 0)
+				break;
+		}
 		while(uc.queuedMidiRxBytes() != 0 && frames < maxDrainFramesPerMessage)
 		{
 			hw->advance(1);
@@ -205,12 +225,26 @@ int main()
 				<< " pc=0x" << std::hex << uc.getPC() << std::dec
 				<< " programWords=" << programWords
 				<< " eraseSectors=" << eraseSectors
+				<< " midiTx=" << midiTxTotal
 				<< std::endl;
 		}
 	}
 
 	std::cerr << "[hw-bootstrap] updater stream drained; allowing final flash work" << std::endl;
 	hw->advance(44100 * 5);
+
+	std::cerr << "[hw-bootstrap] midiTx captured=" << midiTx.size()
+		<< " total=" << midiTxTotal << " bytes:";
+	for(const auto byte : midiTx)
+		std::cerr << " " << std::hex << std::setw(2) << std::setfill('0')
+			<< static_cast<unsigned>(byte);
+	std::cerr << std::dec << std::endl;
+	std::cerr << "[hw-bootstrap] update panelTx captured=" << panelTx.size() << " bytes:";
+	const auto panelStart = panelTx.size() > 256 ? panelTx.size() - 256 : 0;
+	for(size_t i = panelStart; i < panelTx.size(); ++i)
+		std::cerr << " " << std::hex << std::setw(2) << std::setfill('0')
+			<< static_cast<unsigned>(panelTx[i]);
+	std::cerr << std::dec << std::endl;
 
 	const auto installedFlash = uc.copyFlashData();
 	uint64_t fingerprint = 14695981039346656037ull;
