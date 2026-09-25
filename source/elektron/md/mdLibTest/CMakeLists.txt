@@ -324,3 +324,10 @@ if(BUILD_TESTING)
 	set_tests_properties(mdTurboMidiUnitTest mdSdsTransferTest PROPERTIES FIXTURES_SETUP MdSysexTransport)
 	set_property(TEST mdLibTests mdAudioQueueTest APPEND PROPERTY FIXTURES_REQUIRED MdSysexTransport)
 endif()
+
+add_executable(mdFirmwareSysexEscapeTraceTest firmwareSysexEscapeTraceTest.cpp)
+target_link_libraries(mdFirmwareSysexEscapeTraceTest PRIVATE mdLib)
+add_test(NAME mdFirmwareSysexEscapeTraceTest COMMAND mdFirmwareSysexEscapeTraceTest)
+set_tests_properties(mdFirmwareSysexEscapeTraceTest PROPERTIES
+	LABELS "Integration;FirmwareTest;Boot;Trace" SKIP_RETURN_CODE 77 TIMEOUT 60)
+set_property(TARGET mdFirmwareSysexEscapeTraceTest PROPERTY FOLDER "Elektron/test")
