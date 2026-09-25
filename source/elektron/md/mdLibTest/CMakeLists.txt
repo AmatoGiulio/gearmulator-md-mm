@@ -51,6 +51,13 @@ add_executable(mdTurboMidiFirmwareTest turboMidiFirmwareTest.cpp)
 target_link_libraries(mdTurboMidiFirmwareTest PRIVATE mdLib)
 set_property(TARGET mdTurboMidiFirmwareTest PROPERTY FOLDER "Elektron/test")
 
+add_executable(mdFirmwareSysexTest firmwareSysexTest.cpp)
+target_link_libraries(mdFirmwareSysexTest PRIVATE mdLib)
+add_test(NAME mdFirmwareSysexTest COMMAND mdFirmwareSysexTest)
+set_tests_properties(mdFirmwareSysexTest PROPERTIES
+	LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 15)
+set_property(TARGET mdFirmwareSysexTest PROPERTY FOLDER "Elektron/test")
+
 # Manual acceptance test: user-supplied firmware/data paths make this unsuitable
 # for ctest, but it exercises the same validated sender against real firmware and
 # requires an observable machine-state mutation after the UART drains.
