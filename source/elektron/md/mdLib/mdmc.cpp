@@ -161,6 +161,16 @@ namespace md
 		return m_mainRam;
 	}
 
+	bool Microcontroller::replaceMainRam(const std::vector<uint8_t>& _data)
+	{
+		if(_data.size() != m_mainRam.size())
+			return false;
+		m_mainRam = _data;
+		m_immPageAddress = 0xffffffffu;
+		m_immPageData = nullptr;
+		return true;
+	}
+
 	bool Microcontroller::replacePatchRam(const std::vector<uint8_t>& _data)
 	{
 		if(_data.size() != m_patchRam.size())
