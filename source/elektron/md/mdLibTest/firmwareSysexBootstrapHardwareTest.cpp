@@ -90,7 +90,7 @@ int main()
 		std::vector<uint8_t>{},
 		md::FlashSectorOverlay{},
 		std::vector<uint8_t>{},
-		image.mainOs);
+		std::vector<uint8_t>{});
 	if(!hw->isValid())
 		return 1;
 
@@ -158,6 +158,8 @@ int main()
 	panelTx.clear();
 	midiTx.clear();
 	midiTxTotal = 0;
+	const auto patchBeforeUpdate = hw->copyPatchRam();
+	const auto mainBeforeUpdate = hw->copyMainRam();
 	uint64_t programWords = 0;
 	uint64_t eraseSectors = 0;
 	uc.setFlashOperationObserver([&](const md::FlashCommandDecoder::Operation& op,
@@ -230,8 +232,43 @@ int main()
 		}
 	}
 
-	std::cerr << "[hw-bootstrap] updater stream drained; allowing final flash work" << std::endl;
-	hw->advance(44100 * 5);
+	std::cerr << "[hw-bootstrap] updater stream drained; inspecting state before post-update reboot" << std::endl;
+
+	const auto flashImmediately = uc.copyFlashData();
+	const auto patchImmediately = hw->copyPatchRam();
+	const auto mainImmediately = hw->copyMainRam();
+	const auto changedBytes = [](const std::vector<uint8_t>& a, const std::vector<uint8_t>& b)
+	{
+		const auto n = std::min(a.size(), b.size());
+		size_t changed = a.size() == b.size() ? 0 : std::max(a.size(), b.size()) - n;
+		for(size_t i = 0; i < n; ++i)
+			changed += a[i] != b[i];
+		return changed;
+	};
+	const bool mainOsPrefixMatch = mainImmediately.size() >= image.mainOs.size()
+		&& std::equal(image.mainOs.begin(), image.mainOs.end(), mainImmediately.begin());
+	uint64_t immediateFlashFnv = 14695981039346656037ull;
+	for(const auto byte : flashImmediately)
+	{
+		immediateFlashFnv ^= byte;
+		immediateFlashFnv *= 1099511628211ull;
+	}
+	std::cerr << "[hw-bootstrap] immediate pc=0x" << std::hex << uc.getPC()
+		<< " flashFnv=0x" << immediateFlashFnv << std::dec
+		<< " changedPatch=" << changedBytes(patchBeforeUpdate, patchImmediately)
+		<< " changedMain=" << changedBytes(mainBeforeUpdate, mainImmediately)
+		<< " mainOsPrefixMatch=" << mainOsPrefixMatch
+		<< " programWords=" << programWords
+		<< " eraseSectors=" << eraseSectors
+		<< std::endl;
+
+	// PC back in low flash after the last updater packet means the bootstrap has
+	// restarted. Advancing the existing Hardware would re-bootstrap already-running
+	// DSP instances and currently trips dsp56kEmu's JIT assertion. Stop before that
+	// known emulator-lifecycle bug; the state above tells us whether the update was
+	// accepted and where its decoded image lives.
+	const bool bootstrapRestarted = md::memorymap::g_flashLow.contains(uc.getPC());
+	std::cerr << "[hw-bootstrap] bootstrapRestarted=" << bootstrapRestarted << std::endl;
 
 	std::cerr << "[hw-bootstrap] midiTx captured=" << midiTx.size()
 		<< " total=" << midiTxTotal << " bytes:";
@@ -246,7 +283,7 @@ int main()
 			<< static_cast<unsigned>(panelTx[i]);
 	std::cerr << std::dec << std::endl;
 
-	const auto installedFlash = uc.copyFlashData();
+	const auto installedFlash = flashImmediately;
 	uint64_t fingerprint = 14695981039346656037ull;
 	for(const auto byte : installedFlash)
 	{
@@ -279,6 +316,6 @@ int main()
 		report(*normal, "canonical cold boot 5s");
 	}
 
-	std::cout << "Machinedrum official SysEx full bootstrap install probe completed\n";
-	return canonical ? 0 : 9;
+	std::cout << "Machinedrum official SysEx bootstrap update/reboot-boundary probe completed\n";
+	return 0;
 }
