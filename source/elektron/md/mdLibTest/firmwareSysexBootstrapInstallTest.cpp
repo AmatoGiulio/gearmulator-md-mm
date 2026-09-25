@@ -127,6 +127,19 @@ int main()
 	while(uc->getCycles() < menuDeadline)
 		uc->exec();
 
+	std::cerr << "[install] early-menu probe pc=0x" << std::hex << uc->getPC()
+		<< std::dec
+		<< " panelQueued=" << (md::Sim::g_uartRxCapacity - uc->availablePanelRxBytes())
+		<< std::endl;
+	for(int rel = -16; rel <= 32; rel += 2)
+	{
+		const auto addr = static_cast<uint32_t>(uc->getPC() + rel);
+		std::cerr << "[install] code 0x" << std::hex << std::setw(8)
+			<< std::setfill('0') << addr << ":";
+		for(unsigned j = 0; j < 8; ++j)
+			std::cerr << " " << std::setw(4) << uc->read16(addr + j * 2);
+		std::cerr << std::dec << std::endl;
+	}
 	std::cerr << "[install] releasing FUNCTION and pressing TRIG5"
 		<< " pc=0x" << std::hex << uc->getPC() << std::dec << std::endl;
 	uc->queuePanelRx(function->row);
