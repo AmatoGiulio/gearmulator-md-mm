@@ -40,12 +40,13 @@ namespace md
 	constexpr uint64_t g_dsp1CyclesPerEsaiFrame  = 2304;
 
 	Rom initRom(const std::vector<uint8_t>& _romData, const std::string& _romName,
-		const MachineModel _model)
+		const MachineModel _model, const bool _allowDirectBootImage = false)
 	{
 		if(_romData.empty())
 			return RomLoader::findROM(_model);
 		Rom rom(_romData, _romName);
-		if(rom.isValid() && RomLoader::isRomForModel(rom.data(), _model))
+		if(rom.isValid() && (_allowDirectBootImage
+			|| RomLoader::isRomForModel(rom.data(), _model)))
 			return rom;
 		return RomLoader::findROM(_model);
 	}
@@ -88,10 +89,14 @@ namespace md
 		const std::vector<uint8_t>& _initialFlash,
 		const std::vector<uint8_t>& _factoryFlashCache,
 		const FlashSectorOverlay& _pendingFlashOverlay,
-		const std::vector<uint8_t>& _initialUserFlash)
+		const std::vector<uint8_t>& _initialUserFlash,
+		const std::vector<uint8_t>& _directBootMainOs)
 		: m_model(_model)
-		, m_rom(initRom(_romData, _romName, _model))
-		, m_firmwareFingerprint(fingerprintRom(m_rom.data()))
+		, m_rom(initRom(_romData, _romName, _model,
+			_model == MachineModel::Machinedrum && !_directBootMainOs.empty()))
+		, m_firmwareFingerprint(_model == MachineModel::Machinedrum
+			&& !_directBootMainOs.empty()
+			? g_mdOs163Fingerprint : fingerprintRom(m_rom.data()))
 		, m_factoryFlashInitializationExpected(_model == MachineModel::Machinedrum
 			&& _initialFlash.empty() && _factoryFlashCache.empty())
 		, m_uc(m_rom, m_model,
@@ -577,6 +582,15 @@ namespace md
 			score.initialRingDepth = score.currentRingDepth;
 			score.maximumRingDepth = score.currentRingDepth;
 		});
+
+		// The official-updater path supplies the RAM-linked MAIN OS directly.
+		// Canonical ROM boot leaves this empty and follows the original path.
+		if(!_directBootMainOs.empty()
+			&& !m_uc.stageDirectBootMainOs(_directBootMainOs))
+		{
+			std::fprintf(stderr, "[MD] failed to stage direct-boot MAIN OS\n");
+			return;
+		}
 
 		// Load SP/PC from the reset vectors before scheduled UC execution starts.
 		m_uc.reset();
