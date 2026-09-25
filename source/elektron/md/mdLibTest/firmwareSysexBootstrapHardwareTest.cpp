@@ -135,28 +135,16 @@ int main()
 	hw->advance(8820); // 200 ms
 	report(*hw, "after TRIG5");
 
-	const auto before = uc.midiRxConsumedCount();
-	if(!uc.tryQueueMidiRx(sysex.front()))
-	{
-		std::cerr << "[hw-bootstrap] failed to queue F0" << std::endl;
-		return 3;
-	}
-	hw->advance(22050); // 500 ms
-	const auto delta = uc.midiRxConsumedCount() - before;
-	report(*hw, "after F0");
-	std::cerr << "[hw-bootstrap] F0 consumedDelta=" << delta
-		<< " queued=" << uc.queuedMidiRxBytes() << std::endl;
+	// Previous probe proved that MIDI UPGRADE consumes UART1 bytes here. Do NOT
+	// consume F0 as a standalone liveness probe: leaving the receiver inside an
+	// open SysEx frame for hundreds of milliseconds can invalidate packet zero.
+	// Start the real transfer at byte zero and keep every firmware packet intact.
+	report(*hw, "MIDI UPGRADE ready");
 
-	if(delta == 0)
-	{
-		std::cerr << "[hw-bootstrap] MIDI UPGRADE still did not consume F0" << std::endl;
-		return 4;
-	}
-
-	// Feed the official updater one complete SysEx message at a time. The first
-	// message's F0 was consumed by the probe above. Waiting for UART1 RX to drain
-	// before admitting the next message preserves protocol boundaries without
-	// forcing the ~9 minute physical DIN baud rate into this headless test.
+	// Feed the official updater one complete SysEx message at a time. Waiting for
+	// UART1 RX to drain before admitting the next message preserves protocol
+	// boundaries without forcing the ~9 minute physical DIN baud rate into this
+	// headless test.
 	uint64_t programWords = 0;
 	uint64_t eraseSectors = 0;
 	uc.setFlashOperationObserver([&](const md::FlashCommandDecoder::Operation& op,
@@ -168,7 +156,7 @@ int main()
 			++eraseSectors;
 	});
 
-	size_t cursor = 1; // F0 already consumed
+	size_t cursor = 0
 	size_t messageIndex = 0;
 	constexpr uint32_t maxDrainFramesPerMessage = 44100 * 2; // 2 s emulated
 	while(cursor < sysex.size())
