@@ -176,6 +176,41 @@ int main()
 		trace->advance(badFrame - 1);
 
 	auto& uc = trace->getUC();
+
+	// ColdFire VBR ignores the low 20 bits, so only 1 MiB boundaries are valid.
+	// Probe the mapped boundaries that could plausibly contain the exception table
+	// prepared by the skipped bootstrap.
+	constexpr std::array<uint32_t, 8> vbrCandidates{{
+		0x00000000u, 0x00100000u, 0x00200000u, 0x00700000u,
+		0x01000000u, 0x10000000u, 0x20000000u, 0x40000000u
+	}};
+	for(const auto base : vbrCandidates)
+	{
+		const auto v11 = read32(uc, base + 0x11u * 4u);
+		const auto v19 = read32(uc, base + 0x19u * 4u);
+		const auto v1b = read32(uc, base + 0x1bu * 4u);
+		std::cerr << "[escape-trace] VBR candidate 0x"
+			<< std::hex << std::setw(8) << std::setfill('0') << base
+			<< " vec11=0x" << std::setw(8) << v11
+			<< " vec19=0x" << std::setw(8) << v19
+			<< " vec1b=0x" << std::setw(8) << v1b
+			<< " valid11=" << std::dec << executableAddress(v11)
+			<< std::endl;
+	}
+
+	const auto flashNow = uc.copyFlashData();
+	size_t programmedLowFlash = 0;
+	for(size_t i = 8; i < 0x100000 && i < flashNow.size(); ++i)
+		if(flashNow[i] != 0xff)
+			++programmedLowFlash;
+	std::cerr << "[escape-trace] programmed low-flash bytes (excluding reset vectors)="
+		<< programmedLowFlash << std::endl;
+	std::cerr << "[escape-trace] flash[0x40..0x4f]=";
+	for(size_t i = 0x40; i < 0x50 && i < flashNow.size(); ++i)
+		std::cerr << ' ' << std::hex << std::setw(2) << std::setfill('0')
+			<< static_cast<unsigned>(flashNow[i]);
+	std::cerr << std::dec << std::endl;
+
 	std::deque<TraceRow> history;
 	constexpr size_t historySize = 24;
 	constexpr uint32_t maxInstructions = 20000;
