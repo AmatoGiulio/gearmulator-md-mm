@@ -18,4 +18,11 @@ namespace md
 
 	bool decodeMachinedrumOs163Sysex(FirmwareSysexImage& _out,
 		const std::vector<uint8_t>& _sysex, std::string& _error);
+
+	// Experimental clean-room bootstrap image for the official updater path.
+	// It is deliberately NOT a canonical Elektron ROM: only reset vectors and
+	// the updater-provided factory waveform bank are staged. The decoded MAIN OS
+	// is loaded separately into 0x00200000 before reset.
+	std::vector<uint8_t> makeMachinedrumOs163DirectBootFlash(
+		const FirmwareSysexImage& _image);
 }
