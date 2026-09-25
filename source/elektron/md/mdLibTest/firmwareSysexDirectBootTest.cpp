@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <iostream>
 #include <iterator>
+#include <memory>
 #include <vector>
 
 int main()
@@ -46,22 +47,23 @@ int main()
 	}
 
 	std::cerr << "[direct-boot] constructing ColdFire..." << std::endl;
-	md::Microcontroller uc(rom, md::MachineModel::Machinedrum, {}, {});
+	auto uc = std::make_unique<md::Microcontroller>(
+		rom, md::MachineModel::Machinedrum, std::vector<uint8_t>{}, std::vector<uint8_t>{});
 	std::cerr << "[direct-boot] ColdFire constructed" << std::endl;
-	if(!uc.stageDirectBootMainOs(image.mainOs))
+	if(!uc->stageDirectBootMainOs(image.mainOs))
 	{
 		std::cerr << "could not stage MAIN OS at 0x00200000\n";
 		return 1;
 	}
 
 	std::cerr << std::hex << std::setfill('0')
-		<< "[direct-boot] vectors sp=0x" << std::setw(8) << uc.getResetSP()
-		<< " pc=0x" << std::setw(8) << uc.getResetPC() << std::dec << std::endl;
+		<< "[direct-boot] vectors sp=0x" << std::setw(8) << uc->getResetSP()
+		<< " pc=0x" << std::setw(8) << uc->getResetPC() << std::dec << std::endl;
 	std::cerr << "[direct-boot] calling reset()" << std::endl;
-	uc.reset();
+	uc->reset();
 	std::cerr << "[direct-boot] reset() returned" << std::endl;
-	const auto resetPc = uc.getPC();
-	const auto resetSp = uc.getAReg(7);
+	const auto resetPc = uc->getPC();
+	const auto resetSp = uc->getAReg(7);
 	std::cout << std::hex << std::setfill('0')
 		<< "reset  pc=0x" << std::setw(8) << resetPc
 		<< " sp=0x" << std::setw(8) << resetSp << '\n';
@@ -74,12 +76,12 @@ int main()
 
 	// The first exec consumes the ColdFire reset exception cycles.
 	std::cerr << "[direct-boot] consuming reset cycles" << std::endl;
-	const auto resetCycles = uc.exec();
+	const auto resetCycles = uc->exec();
 	std::cerr << "[direct-boot] executing first MAIN OS instruction" << std::endl;
-	const auto firstCycles = uc.exec();
+	const auto firstCycles = uc->exec();
 	std::cerr << "[direct-boot] first instruction returned" << std::endl;
-	const auto firstPc = uc.getPC();
-	const auto firstSp = uc.getAReg(7);
+	const auto firstPc = uc->getPC();
+	const auto firstSp = uc->getAReg(7);
 	std::cout << "first  pc=0x" << std::setw(8) << firstPc
 		<< " sp=0x" << std::setw(8) << firstSp
 		<< std::dec << " resetCycles=" << resetCycles
@@ -93,14 +95,14 @@ int main()
 	}
 
 	for(int i = 0; i < 31; ++i)
-		uc.exec();
+		uc->exec();
 
 	std::cout << std::hex
-		<< "after32 pc=0x" << std::setw(8) << uc.getPC()
-		<< " sp=0x" << std::setw(8) << uc.getAReg(7)
-		<< std::dec << " totalCycles=" << uc.getCycles() << '\n';
+		<< "after32 pc=0x" << std::setw(8) << uc->getPC()
+		<< " sp=0x" << std::setw(8) << uc->getAReg(7)
+		<< std::dec << " totalCycles=" << uc->getCycles() << '\n';
 
-	if(uc.getPC() == 0 || uc.getPC() == 0xffffffffu)
+	if(uc->getPC() == 0 || uc->getPC() == 0xffffffffu)
 	{
 		std::cerr << "MAIN OS execution escaped to an invalid PC\n";
 		return 1;
