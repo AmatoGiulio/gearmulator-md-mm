@@ -5,6 +5,7 @@
 #include "mdLib/mdtypes.h"
 #include "mc68k/cpuState.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
@@ -152,6 +153,110 @@ int main()
 		return 4;
 	}
 
-	std::cout << "Machinedrum reconstructed bootstrap entered MIDI UPGRADE on full Hardware\n";
-	return 0;
+	// Feed the official updater one complete SysEx message at a time. The first
+	// message's F0 was consumed by the probe above. Waiting for UART1 RX to drain
+	// before admitting the next message preserves protocol boundaries without
+	// forcing the ~9 minute physical DIN baud rate into this headless test.
+	uint64_t programWords = 0;
+	uint64_t eraseSectors = 0;
+	uc.setFlashOperationObserver([&](const md::FlashCommandDecoder::Operation& op,
+		const uint64_t)
+	{
+		if(op.type == md::FlashCommandDecoder::Operation::Type::ProgramWord)
+			++programWords;
+		else if(op.type == md::FlashCommandDecoder::Operation::Type::EraseSector)
+			++eraseSectors;
+	});
+
+	size_t cursor = 1; // F0 already consumed
+	size_t messageIndex = 0;
+	constexpr uint32_t maxDrainFramesPerMessage = 44100 * 2; // 2 s emulated
+	while(cursor < sysex.size())
+	{
+		const auto eox = std::find(sysex.begin() + cursor, sysex.end(), uint8_t{0xf7});
+		if(eox == sysex.end())
+		{
+			std::cerr << "[hw-bootstrap] malformed updater stream at byte " << cursor << std::endl;
+			return 5;
+		}
+		const auto end = static_cast<size_t>(eox - sysex.begin()) + 1;
+
+		for(; cursor < end; ++cursor)
+		{
+			if(!uc.tryQueueMidiRx(sysex[cursor]))
+			{
+				std::cerr << "[hw-bootstrap] UART1 RX full at byte " << cursor << std::endl;
+				return 6;
+			}
+		}
+
+		uint32_t frames = 0;
+		while(uc.queuedMidiRxBytes() != 0 && frames < maxDrainFramesPerMessage)
+		{
+			hw->advance(1);
+			++frames;
+		}
+		if(uc.queuedMidiRxBytes() != 0)
+		{
+			std::cerr << "[hw-bootstrap] message " << messageIndex
+				<< " stalled queued=" << uc.queuedMidiRxBytes()
+				<< " pc=0x" << std::hex << uc.getPC() << std::dec << std::endl;
+			return 7;
+		}
+
+		// Give packet validation / flash programming a small scheduler window before
+		// the next SysEx frame. This is protocol pacing, not physical MIDI baud pacing.
+		hw->advance(4);
+		++messageIndex;
+
+		if((messageIndex % 1000) == 0 || cursor == sysex.size())
+		{
+			std::cerr << "[hw-bootstrap] messages=" << messageIndex
+				<< " bytes=" << cursor << "/" << sysex.size()
+				<< " consumed=" << uc.midiRxConsumedCount()
+				<< " pc=0x" << std::hex << uc.getPC() << std::dec
+				<< " programWords=" << programWords
+				<< " eraseSectors=" << eraseSectors
+				<< std::endl;
+		}
+	}
+
+	std::cerr << "[hw-bootstrap] updater stream drained; allowing final flash work" << std::endl;
+	hw->advance(44100 * 5);
+
+	const auto installedFlash = uc.copyFlashData();
+	uint64_t fingerprint = 14695981039346656037ull;
+	for(const auto byte : installedFlash)
+	{
+		fingerprint ^= byte;
+		fingerprint *= 1099511628211ull;
+	}
+	const bool canonical = fingerprint == md::g_mdOs163Fingerprint;
+	std::cerr << "[hw-bootstrap] final pc=0x" << std::hex << uc.getPC()
+		<< " flashFnv=0x" << fingerprint
+		<< " canonical=0x" << md::g_mdOs163Fingerprint
+		<< std::dec
+		<< " canonicalImage=" << canonical
+		<< " consumed=" << uc.midiRxConsumedCount()
+		<< " overflow=" << uc.midiRxOverflowCount()
+		<< " programWords=" << programWords
+		<< " eraseSectors=" << eraseSectors
+		<< " dsp1=" << hw->getDspMixer().booted()
+		<< " dsp2=" << hw->getDspProducer().booted()
+		<< std::endl;
+
+	if(canonical)
+	{
+		std::cerr << "[hw-bootstrap] cold booting canonical installed flash through normal Hardware" << std::endl;
+		auto normal = std::make_unique<md::Hardware>(
+			installedFlash, "md-os163-installed-from-official-syx",
+			md::MachineModel::Machinedrum);
+		if(!normal->isValid())
+			return 8;
+		normal->advance(220500);
+		report(*normal, "canonical cold boot 5s");
+	}
+
+	std::cout << "Machinedrum official SysEx full bootstrap install probe completed\n";
+	return canonical ? 0 : 9;
 }
