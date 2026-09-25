@@ -156,6 +156,11 @@ namespace md
 		return m_patchRam;
 	}
 
+	std::vector<uint8_t> Microcontroller::copyMainRam() const
+	{
+		return m_mainRam;
+	}
+
 	bool Microcontroller::replacePatchRam(const std::vector<uint8_t>& _data)
 	{
 		if(_data.size() != m_patchRam.size())
