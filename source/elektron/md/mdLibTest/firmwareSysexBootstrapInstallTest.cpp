@@ -1,6 +1,7 @@
 #include "mdLib/mdfirmwaresysex.h"
 #include "mdLib/mdhardware.h"
 #include "mdLib/mdmemorymap.h"
+#include "mdLib/mdsim.h"
 #include "mdLib/mdrom.h"
 #include "mdLib/mdtypes.h"
 #include "mc68k/cpuState.h"
@@ -99,29 +100,55 @@ int main()
 	uc->reset();
 	uc->exec();
 
-	constexpr uint64_t readyTimeoutCycles = md::g_ucClockHz * 5ull;
-	while(!uc->isMidiReceiveReady() && uc->getCycles() < readyTimeoutCycles)
+	// The bootstrap uses a polling receive path: unlike the full MAIN OS it does
+	// not need to enable UART RX interrupts before accepting an update.
+	const auto settleDeadline = uc->getCycles() + md::g_ucClockHz * 5ull;
+	while(uc->getCycles() < settleDeadline)
 		uc->exec();
 
+	const auto uartBase = md::memorymap::g_sim.begin + md::Sim::g_uart1Base;
+	const auto usr = uc->read8(uartBase + md::Sim::g_uartUsr);
+	const auto uisr = uc->read8(uartBase + md::Sim::g_uartIsr);
 	std::cerr << "[install] bootstrap pc=0x" << std::hex << uc->getPC()
 		<< " sp=0x" << uc->getAReg(7)
 		<< " vbr=0x" << uc->getCpuState()->vbr
 		<< " mbar=0x" << uc->getCpuState()->cf_mbar
 		<< " rambar=0x" << uc->getCpuState()->cf_rambar
+		<< " usr=0x" << static_cast<unsigned>(usr)
+		<< " uisr=0x" << static_cast<unsigned>(uisr)
 		<< std::dec
-		<< " midiReady=" << uc->isMidiReceiveReady()
+		<< " midiIrqEnabled=" << uc->isMidiReceiveReady()
 		<< " cycles=" << uc->getCycles() << std::endl;
 
-	if(!uc->isMidiReceiveReady())
+	// Prove the polling path before attempting the entire 1.6 MiB transfer.
+	const auto probeConsumed = uc->midiRxConsumedCount();
+	if(!uc->tryQueueMidiRx(sysex.front()))
 	{
-		std::cerr << "[install] reconstructed bootstrap did not enable MIDI RX within 5s" << std::endl;
+		std::cerr << "[install] could not queue first SysEx byte" << std::endl;
+		return 2;
+	}
+	constexpr uint64_t pollingProbeInstructions = 5000000ull;
+	for(uint64_t i = 0; i < pollingProbeInstructions
+		&& uc->midiRxConsumedCount() == probeConsumed; ++i)
+		uc->exec();
+
+	std::cerr << "[install] polling probe firstByte=0x" << std::hex
+		<< static_cast<unsigned>(sysex.front()) << std::dec
+		<< " consumedDelta=" << (uc->midiRxConsumedCount() - probeConsumed)
+		<< " queued=" << uc->queuedMidiRxBytes()
+		<< " pc=0x" << std::hex << uc->getPC() << std::dec << std::endl;
+
+	if(uc->midiRxConsumedCount() == probeConsumed)
+	{
+		std::cerr << "[install] bootstrap did not poll/consume the first MIDI byte" << std::endl;
 		return 2;
 	}
 
-	std::cerr << "[install] phase2: feeding " << sysex.size()
-		<< " official SysEx bytes" << std::endl;
+	std::cerr << "[install] phase2: polling MIDI path confirmed; feeding "
+		<< sysex.size() << " official SysEx bytes" << std::endl;
 
-	size_t cursor = 0;
+	// Byte zero was consumed by the probe above.
+	size_t cursor = 1;
 	uint64_t lastConsumed = uc->midiRxConsumedCount();
 	uint64_t noProgressInstructions = 0;
 	size_t nextReport = 100000;
