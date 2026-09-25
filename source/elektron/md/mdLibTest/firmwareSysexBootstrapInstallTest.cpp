@@ -1,6 +1,7 @@
 #include "mdLib/mdfirmwaresysex.h"
 #include "mdLib/mdhardware.h"
 #include "mdLib/mdmemorymap.h"
+#include "mdLib/mdpanel.h"
 #include "mdLib/mdsim.h"
 #include "mdLib/mdrom.h"
 #include "mdLib/mdtypes.h"
@@ -97,12 +98,53 @@ int main()
 			++eraseSectors;
 	});
 
+	// Enter the documented EARLY STARTUP MENU exactly like the hardware:
+	// hold FUNCTION while powering on, release it once the menu is up, then press
+	// TRIG 5 (MIDI UPGRADE). Panel input is UART2 [row][mask].
+	const auto function = md::panelPacket(md::MachineModel::Machinedrum,
+		md::PanelControl::Function);
+	const auto trig5 = md::panelPacket(md::MachineModel::Machinedrum,
+		md::PanelControl::Trigger5);
+	if(!function || !trig5)
+	{
+		std::cerr << "[install] missing verified MD panel packet mapping" << std::endl;
+		return 2;
+	}
+
+	std::cerr << "[install] holding FUNCTION at cold reset row=0x"
+		<< std::hex << static_cast<unsigned>(function->row)
+		<< " mask=0x" << static_cast<unsigned>(function->mask)
+		<< std::dec << std::endl;
+	uc->queuePanelRx(function->row);
+	uc->queuePanelRx(function->mask);
+
 	uc->reset();
 	uc->exec();
 
-	// The bootstrap uses a polling receive path: unlike the full MAIN OS it does
-	// not need to enable UART RX interrupts before accepting an update.
-	const auto settleDeadline = uc->getCycles() + md::g_ucClockHz * 5ull;
+	// Give the reconstructed bootstrap time to initialize UART2 and enter the
+	// early-startup menu while FUNCTION remains logically held.
+	const auto menuDeadline = uc->getCycles() + md::g_ucClockHz * 1ull;
+	while(uc->getCycles() < menuDeadline)
+		uc->exec();
+
+	std::cerr << "[install] releasing FUNCTION and pressing TRIG5"
+		<< " pc=0x" << std::hex << uc->getPC() << std::dec << std::endl;
+	uc->queuePanelRx(function->row);
+	uc->queuePanelRx(0x00);
+	for(uint64_t deadline = uc->getCycles() + md::g_ucClockHz / 10;
+		uc->getCycles() < deadline;)
+		uc->exec();
+
+	uc->queuePanelRx(trig5->row);
+	uc->queuePanelRx(trig5->mask);
+	for(uint64_t deadline = uc->getCycles() + md::g_ucClockHz / 20;
+		uc->getCycles() < deadline;)
+		uc->exec();
+	uc->queuePanelRx(trig5->row);
+	uc->queuePanelRx(0x00);
+
+	// Allow MIDI UPGRADE mode to settle before probing UART1.
+	const auto settleDeadline = uc->getCycles() + md::g_ucClockHz * 2ull;
 	while(uc->getCycles() < settleDeadline)
 		uc->exec();
 
