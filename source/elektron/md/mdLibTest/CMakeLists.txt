@@ -331,3 +331,10 @@ add_test(NAME mdFirmwareSysexEscapeTraceTest COMMAND mdFirmwareSysexEscapeTraceT
 set_tests_properties(mdFirmwareSysexEscapeTraceTest PROPERTIES
 	LABELS "Integration;FirmwareTest;Boot;Trace" SKIP_RETURN_CODE 77 TIMEOUT 60)
 set_property(TARGET mdFirmwareSysexEscapeTraceTest PROPERTY FOLDER "Elektron/test")
+
+add_executable(mdFirmwareSysexVbrBootTest firmwareSysexVbrBootTest.cpp)
+target_link_libraries(mdFirmwareSysexVbrBootTest PRIVATE mdLib)
+add_test(NAME mdFirmwareSysexVbrBootTest COMMAND mdFirmwareSysexVbrBootTest)
+set_tests_properties(mdFirmwareSysexVbrBootTest PROPERTIES
+	LABELS "Integration;FirmwareTest;Boot;VBR" SKIP_RETURN_CODE 77 TIMEOUT 90)
+set_property(TARGET mdFirmwareSysexVbrBootTest PROPERTY FOLDER "Elektron/test")
