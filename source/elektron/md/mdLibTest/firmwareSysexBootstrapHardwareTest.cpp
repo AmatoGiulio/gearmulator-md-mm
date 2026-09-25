@@ -90,9 +90,15 @@ int main()
 		std::vector<uint8_t>{},
 		md::FlashSectorOverlay{},
 		std::vector<uint8_t>{},
-		std::vector<uint8_t>{});
+		// Non-empty direct-boot payload admits this reconstructed, non-canonical
+		// bootstrap through initRom(). A single zero byte leaves MAIN RAM fully
+		// zeroed, so phase 2 is still a genuine bootstrap cold boot.
+		std::vector<uint8_t>{0});
 	if(!hw->isValid())
+	{
+		std::cerr << "[hw-bootstrap] reconstructed bootstrap Hardware rejected" << std::endl;
 		return 1;
+	}
 
 	auto& uc = hw->getUC();
 	std::vector<uint8_t> panelTx;
