@@ -155,6 +155,10 @@ namespace md
 		{
 			m_midiTransmitTap = std::move(_tap);
 		}
+		void setPanelTransmitTap(std::function<void(uint8_t)> _tap)
+		{
+			m_panelTransmitTap = std::move(_tap);
+		}
 		std::vector<uint8_t> copyPatchRam() const;
 		bool replacePatchRam(const std::vector<uint8_t>& _data);
 		std::vector<uint8_t> copyFlashData() const;
@@ -236,6 +240,7 @@ namespace md
 		bool m_midiTxDiscontinuity = false;
 		std::atomic<uint64_t> m_midiTxOverflow{0};
 		std::function<void(uint8_t)> m_midiTransmitTap;
+		std::function<void(uint8_t)> m_panelTransmitTap;
 		synthLib::MidiBufferParser m_midiTxParser{synthLib::MidiEventSource::Device};
 
 		// ColdFire-facing HI08 register files for the two DSP host-port windows. The
