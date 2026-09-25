@@ -13,6 +13,7 @@ set(SOURCES
 	mddevice.cpp mddevice.h
 	mddsp.cpp mddsp.h
 	mdflash.cpp mdflash.h
+	mdfirmwaresysex.cpp mdfirmwaresysex.h
 	mdfrontpanel.cpp mdfrontpanel.h
 	mdhardware.cpp mdhardware.h
 	mdhostclock.h
