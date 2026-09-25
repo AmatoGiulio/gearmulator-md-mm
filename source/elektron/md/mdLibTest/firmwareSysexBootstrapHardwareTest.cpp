@@ -156,7 +156,7 @@ int main()
 			++eraseSectors;
 	});
 
-	size_t cursor = 0
+	size_t cursor = 0;
 	size_t messageIndex = 0;
 	constexpr uint32_t maxDrainFramesPerMessage = 44100 * 2; // 2 s emulated
 	while(cursor < sysex.size())
