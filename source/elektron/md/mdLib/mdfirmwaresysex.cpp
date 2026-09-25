@@ -1,5 +1,7 @@
 #include "mdfirmwaresysex.h"
 
+#include "mdtypes.h"
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -193,6 +195,25 @@ namespace md
 			}
 			return true;
 		}
+	}
+
+	std::vector<uint8_t> makeMachinedrumOs163DirectBootFlash(
+		const FirmwareSysexImage& image)
+	{
+		std::vector<uint8_t> flash(g_romSize, 0xff);
+
+		// ColdFire reset vectors. MAIN OS is linked at 0x00200000 and its first
+		// instruction establishes A7=0x00300000 itself as well.
+		flash[0] = 0x00; flash[1] = 0x30; flash[2] = 0x00; flash[3] = 0x00;
+		flash[4] = 0x00; flash[5] = 0x20; flash[6] = 0x00; flash[7] = 0x00;
+
+		// MAME's documented MD UW flash map places the updater's 1 MiB factory
+		// waveform bank at 0x100000..0x1fffff.
+		constexpr size_t waveformOffset = 0x100000;
+		if(image.factoryWaveforms.size() == 0x100000)
+			std::copy(image.factoryWaveforms.begin(), image.factoryWaveforms.end(),
+				flash.begin() + waveformOffset);
+		return flash;
 	}
 
 	bool decodeMachinedrumOs163Sysex(FirmwareSysexImage& out,
