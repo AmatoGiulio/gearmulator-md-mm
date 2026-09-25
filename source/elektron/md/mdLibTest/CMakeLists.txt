@@ -345,3 +345,10 @@ add_test(NAME mdFirmwareSysexBootstrapCaptureTest COMMAND mdFirmwareSysexBootstr
 set_tests_properties(mdFirmwareSysexBootstrapCaptureTest PROPERTIES
 	LABELS "Integration;FirmwareTest;Boot;Flash" SKIP_RETURN_CODE 77 TIMEOUT 120)
 set_property(TARGET mdFirmwareSysexBootstrapCaptureTest PROPERTY FOLDER "Elektron/test")
+
+add_executable(mdFirmwareSysexBootstrapInstallTest firmwareSysexBootstrapInstallTest.cpp)
+target_link_libraries(mdFirmwareSysexBootstrapInstallTest PRIVATE mdLib)
+add_test(NAME mdFirmwareSysexBootstrapInstallTest COMMAND mdFirmwareSysexBootstrapInstallTest)
+set_tests_properties(mdFirmwareSysexBootstrapInstallTest PROPERTIES
+	LABELS "Integration;FirmwareTest;Boot;Install" SKIP_RETURN_CODE 77 TIMEOUT 180)
+set_property(TARGET mdFirmwareSysexBootstrapInstallTest PROPERTY FOLDER "Elektron/test")
