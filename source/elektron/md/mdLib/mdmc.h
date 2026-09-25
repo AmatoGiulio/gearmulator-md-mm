@@ -162,6 +162,10 @@ namespace md
 		std::vector<uint8_t> copyPatchRam() const;
 		std::vector<uint8_t> copyMainRam() const;
 		bool replaceMainRam(const std::vector<uint8_t>& _data);
+		std::vector<uint8_t> copyLoaderRam() const;
+		bool replaceLoaderRam(const std::vector<uint8_t>& _data);
+		std::vector<uint8_t> copyInternalSram() const;
+		bool replaceInternalSram(const std::vector<uint8_t>& _data);
 		bool replacePatchRam(const std::vector<uint8_t>& _data);
 		std::vector<uint8_t> copyFlashData() const;
 		std::vector<uint8_t> copyUserFlash() const;
