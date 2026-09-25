@@ -166,6 +166,8 @@ int main()
 	midiTxTotal = 0;
 	const auto patchBeforeUpdate = hw->copyPatchRam();
 	const auto mainBeforeUpdate = hw->copyMainRam();
+	const auto loaderBeforeUpdate = uc.copyLoaderRam();
+	const auto internalBeforeUpdate = uc.copyInternalSram();
 	uint64_t programWords = 0;
 	uint64_t eraseSectors = 0;
 	uc.setFlashOperationObserver([&](const md::FlashCommandDecoder::Operation& op,
@@ -243,6 +245,17 @@ int main()
 	const auto flashImmediately = uc.copyFlashData();
 	const auto patchImmediately = hw->copyPatchRam();
 	const auto mainImmediately = hw->copyMainRam();
+	const auto loaderImmediately = uc.copyLoaderRam();
+	const auto internalImmediately = uc.copyInternalSram();
+	const auto immediatePc = uc.getPC();
+	const auto immediateSp = uc.getAReg(7);
+	const auto immediateVbr = uc.getCpuState()->vbr;
+	const auto immediateMbar = uc.getCpuState()->mbar;
+	const auto immediateRambar = uc.getCpuState()->rambar;
+	const auto consumedImmediately = uc.midiRxConsumedCount();
+	const auto overflowImmediately = uc.midiRxOverflowCount();
+	const auto dsp1Immediately = hw->getDspMixer().booted();
+	const auto dsp2Immediately = hw->getDspProducer().booted();
 	const auto changedBytes = [](const std::vector<uint8_t>& a, const std::vector<uint8_t>& b)
 	{
 		const auto n = std::min(a.size(), b.size());
@@ -271,10 +284,16 @@ int main()
 		immediateFlashFnv ^= byte;
 		immediateFlashFnv *= 1099511628211ull;
 	}
-	std::cerr << "[hw-bootstrap] immediate pc=0x" << std::hex << uc.getPC()
+	std::cerr << "[hw-bootstrap] immediate pc=0x" << std::hex << immediatePc
+		<< " sp=0x" << immediateSp
+		<< " vbr=0x" << immediateVbr
+		<< " mbar=0x" << immediateMbar
+		<< " rambar=0x" << immediateRambar
 		<< " flashFnv=0x" << immediateFlashFnv << std::dec
 		<< " changedPatch=" << changedBytes(patchBeforeUpdate, patchImmediately)
 		<< " changedMain=" << changedBytes(mainBeforeUpdate, mainImmediately)
+		<< " changedLoader=" << changedBytes(loaderBeforeUpdate, loaderImmediately)
+		<< " changedInternal=" << changedBytes(internalBeforeUpdate, internalImmediately)
 		<< " mainOsPrefixMatch=" << mainOsPrefixMatch
 		<< " mainOsOffset=" << mainOsOffset
 		<< " decodedTransportOffset=" << decodedTransportOffset
@@ -288,7 +307,7 @@ int main()
 	// DSP instances and currently trips dsp56kEmu's JIT assertion. Stop before that
 	// known emulator-lifecycle bug; the state above tells us whether the update was
 	// accepted and where its decoded image lives.
-	const bool bootstrapRestarted = md::memorymap::g_flashLow.contains(uc.getPC());
+	const bool bootstrapRestarted = md::memorymap::g_flashLow.contains(immediatePc);
 	std::cerr << "[hw-bootstrap] bootstrapRestarted=" << bootstrapRestarted << std::endl;
 
 	if(bootstrapRestarted)
@@ -296,7 +315,7 @@ int main()
 		// The real updater has crossed a warm-reboot boundary while retaining external
 		// main RAM. Rebuild the whole machine so DSP1/DSP2 start from reset too, then
 		// restore the retained RAM before restarting the ColdFire bootstrap.
-		std::cerr << "[hw-bootstrap] phase3 fresh-machine warm reboot with retained MAIN RAM" << std::endl;
+		std::cerr << "[hw-bootstrap] phase3 fresh-machine transition with retained volatile RAM" << std::endl;
 		hw.reset();
 
 		auto rebooted = std::make_unique<md::Hardware>(
@@ -309,13 +328,20 @@ int main()
 			md::FlashSectorOverlay{},
 			std::vector<uint8_t>{},
 			std::vector<uint8_t>{0});
-		if(!rebooted->isValid() || !rebooted->getUC().replaceMainRam(mainImmediately))
+		if(!rebooted->isValid())
 		{
-			std::cerr << "[hw-bootstrap] failed to rebuild warm-reboot machine" << std::endl;
+			std::cerr << "[hw-bootstrap] failed to rebuild transition machine" << std::endl;
 			return 8;
 		}
 
 		auto& rebootUc = rebooted->getUC();
+		if(!rebootUc.replaceMainRam(mainImmediately)
+			|| !rebootUc.replaceLoaderRam(loaderImmediately)
+			|| !rebootUc.replaceInternalSram(internalImmediately))
+		{
+			std::cerr << "[hw-bootstrap] failed to restore retained volatile RAM" << std::endl;
+			return 8;
+		}
 		uint64_t rebootProgramWords = 0;
 		uint64_t rebootEraseSectors = 0;
 		rebootUc.setFlashOperationObserver([&](const md::FlashCommandDecoder::Operation& op,
@@ -380,17 +406,17 @@ int main()
 		fingerprint *= 1099511628211ull;
 	}
 	const bool canonical = fingerprint == md::g_mdOs163Fingerprint;
-	std::cerr << "[hw-bootstrap] final pc=0x" << std::hex << uc.getPC()
+	std::cerr << "[hw-bootstrap] phase2-final pc=0x" << std::hex << immediatePc
 		<< " flashFnv=0x" << fingerprint
 		<< " canonical=0x" << md::g_mdOs163Fingerprint
 		<< std::dec
 		<< " canonicalImage=" << canonical
-		<< " consumed=" << uc.midiRxConsumedCount()
-		<< " overflow=" << uc.midiRxOverflowCount()
+		<< " consumed=" << consumedImmediately
+		<< " overflow=" << overflowImmediately
 		<< " programWords=" << programWords
 		<< " eraseSectors=" << eraseSectors
-		<< " dsp1=" << hw->getDspMixer().booted()
-		<< " dsp2=" << hw->getDspProducer().booted()
+		<< " dsp1=" << dsp1Immediately
+		<< " dsp2=" << dsp2Immediately
 		<< std::endl;
 
 	if(canonical)
