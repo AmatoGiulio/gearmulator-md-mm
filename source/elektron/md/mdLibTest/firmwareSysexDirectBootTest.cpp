@@ -19,17 +19,25 @@ int main()
 		return 77;
 	}
 
+	std::cerr << "[direct-boot] reading SysEx: " << path << std::endl;
 	std::ifstream input(path, std::ios::binary);
 	const std::vector<uint8_t> sysex{std::istreambuf_iterator<char>(input), {}};
+	std::cerr << "[direct-boot] bytes=" << sysex.size() << std::endl;
 	md::FirmwareSysexImage image;
 	std::string error;
+	std::cerr << "[direct-boot] decoding updater..." << std::endl;
 	if(!md::decodeMachinedrumOs163Sysex(image, sysex, error))
 	{
 		std::cerr << "decode failed: " << error << '\n';
 		return 1;
 	}
 
+	std::cerr << "[direct-boot] decoded MAIN=" << image.mainOs.size()
+		<< " DSP1=" << image.dsp1.size() << " DSP2=" << image.dsp2.size()
+		<< " wave=" << image.factoryWaveforms.size() << std::endl;
+	std::cerr << "[direct-boot] creating synthetic flash..." << std::endl;
 	auto flash = md::makeMachinedrumOs163DirectBootFlash(image);
+	std::cerr << "[direct-boot] flash bytes=" << flash.size() << std::endl;
 	md::Rom rom(flash, "md-os163-official-syx-direct-boot");
 	if(!rom.isValid())
 	{
@@ -37,14 +45,21 @@ int main()
 		return 1;
 	}
 
+	std::cerr << "[direct-boot] constructing ColdFire..." << std::endl;
 	md::Microcontroller uc(rom, md::MachineModel::Machinedrum, {}, {});
+	std::cerr << "[direct-boot] ColdFire constructed" << std::endl;
 	if(!uc.stageDirectBootMainOs(image.mainOs))
 	{
 		std::cerr << "could not stage MAIN OS at 0x00200000\n";
 		return 1;
 	}
 
+	std::cerr << std::hex << std::setfill('0')
+		<< "[direct-boot] vectors sp=0x" << std::setw(8) << uc.getResetSP()
+		<< " pc=0x" << std::setw(8) << uc.getResetPC() << std::dec << std::endl;
+	std::cerr << "[direct-boot] calling reset()" << std::endl;
 	uc.reset();
+	std::cerr << "[direct-boot] reset() returned" << std::endl;
 	const auto resetPc = uc.getPC();
 	const auto resetSp = uc.getAReg(7);
 	std::cout << std::hex << std::setfill('0')
@@ -58,8 +73,11 @@ int main()
 	}
 
 	// The first exec consumes the ColdFire reset exception cycles.
+	std::cerr << "[direct-boot] consuming reset cycles" << std::endl;
 	const auto resetCycles = uc.exec();
+	std::cerr << "[direct-boot] executing first MAIN OS instruction" << std::endl;
 	const auto firstCycles = uc.exec();
+	std::cerr << "[direct-boot] first instruction returned" << std::endl;
 	const auto firstPc = uc.getPC();
 	const auto firstSp = uc.getAReg(7);
 	std::cout << "first  pc=0x" << std::setw(8) << firstPc
