@@ -2,6 +2,7 @@
 #include "mdLib/mdhardware.h"
 #include "mdLib/mdmemorymap.h"
 #include "mdLib/mdstate.h"
+#include "mc68k/cpuState.h"
 
 #include <array>
 #include <cstdlib>
@@ -43,6 +44,11 @@ namespace
 		uint32_t stack0 = 0;
 		uint16_t op0 = 0;
 		uint16_t op1 = 0;
+		uint32_t vbr = 0;
+		uint32_t intLevel = 0;
+		uint32_t intMask = 0;
+		uint32_t cfMbar = 0;
+		uint32_t cfRambar = 0;
 		std::array<uint32_t, 8> a{};
 		std::array<uint32_t, 8> d{};
 	};
@@ -61,6 +67,12 @@ namespace
 		if(row.sp >= md::memorymap::g_mainRam.begin
 			&& row.sp + 4 <= md::memorymap::g_mainRam.end)
 			row.stack0 = read32(uc, row.sp);
+		const auto* cpu = uc.getCpuState();
+		row.vbr = cpu->vbr;
+		row.intLevel = cpu->int_level;
+		row.intMask = cpu->int_mask;
+		row.cfMbar = cpu->cf_mbar;
+		row.cfRambar = cpu->cf_rambar;
 		for(uint32_t i = 0; i < 8; ++i)
 		{
 			row.a[i] = uc.getAReg(i);
@@ -78,6 +90,11 @@ namespace
 			<< " op=" << std::setw(4) << r.op0 << " " << std::setw(4) << r.op1
 			<< " sp=0x" << std::setw(8) << r.sp
 			<< " [sp]=0x" << std::setw(8) << r.stack0
+			<< " vbr=0x" << std::setw(8) << r.vbr
+			<< " il=0x" << std::setw(4) << r.intLevel
+			<< " im=0x" << std::setw(4) << r.intMask
+			<< " mbar=0x" << std::setw(8) << r.cfMbar
+			<< " rambar=0x" << std::setw(8) << r.cfRambar
 			<< " a0=0x" << std::setw(8) << r.a[0]
 			<< " a1=0x" << std::setw(8) << r.a[1]
 			<< " a2=0x" << std::setw(8) << r.a[2]
@@ -176,7 +193,21 @@ int main()
 				<< " -> pc=0x" << std::hex << uc.getPC() << std::dec << std::endl;
 			for(const auto& row : history)
 				printRow(row, "  before");
-			printRow(capture(uc), "  AFTER ");
+			const auto after = capture(uc);
+			printRow(after, "  AFTER ");
+			if((after.stack0 >> 28) >= 4 && (after.stack0 >> 28) <= 7)
+			{
+				const auto vector = static_cast<uint8_t>((after.stack0 >> 18) & 0xff);
+				const auto vectorAddress = after.vbr + static_cast<uint32_t>(vector) * 4u;
+				const auto vectorTarget = read32(uc, vectorAddress);
+				std::cerr << "[escape-trace] ColdFire exception frame: vector=0x"
+					<< std::hex << static_cast<unsigned>(vector)
+					<< " VBR=0x" << after.vbr
+					<< " vectorAddress=0x" << vectorAddress
+					<< " target=0x" << vectorTarget
+					<< " savedPC=0x" << read32(uc, after.sp + 4)
+					<< std::dec << std::endl;
+			}
 			return 0;
 		}
 	}
