@@ -58,6 +58,13 @@ set_tests_properties(mdFirmwareSysexTest PROPERTIES
 	LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 15)
 set_property(TARGET mdFirmwareSysexTest PROPERTY FOLDER "Elektron/test")
 
+add_executable(mdFirmwareSysexDirectBootTest firmwareSysexDirectBootTest.cpp)
+target_link_libraries(mdFirmwareSysexDirectBootTest PRIVATE mdLib)
+add_test(NAME mdFirmwareSysexDirectBootTest COMMAND mdFirmwareSysexDirectBootTest)
+set_tests_properties(mdFirmwareSysexDirectBootTest PROPERTIES
+	LABELS "Integration;FirmwareTest;Boot" SKIP_RETURN_CODE 77 TIMEOUT 15)
+set_property(TARGET mdFirmwareSysexDirectBootTest PROPERTY FOLDER "Elektron/test")
+
 # Manual acceptance test: user-supplied firmware/data paths make this unsuitable
 # for ctest, but it exercises the same validated sender against real firmware and
 # requires an observable machine-state mutation after the UART drains.
