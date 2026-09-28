@@ -6,6 +6,8 @@
 #include "mc68k/hdi08.h"
 #include "synthLib/realtimeInstrumentation.h"
 
+#include <new>
+
 namespace md
 {
 	using dsp56k::TWord;
@@ -203,6 +205,29 @@ namespace md
 		// There are no background DSP threads. Publish the completed boot state to
 		// the deterministic scheduler that owns all subsequent execution.
 		m_schedRunnable.store(true, std::memory_order_release);
+	}
+
+	void Dsp::prepareForBootstrapReload()
+	{
+		// The Machinedrum updater returns to the ColdFire bootstrap and hardware-resets
+		// both DSPs before uploading their boot images again. Keep the ColdFire CPU/SIM
+		// state intact, but put this DSP back into its power-on boot receiver state.
+		m_schedRunnable.store(false, std::memory_order_release);
+		m_timedHostRx = {};
+		m_hdiUC.clearRx();
+
+		m_dsp.resetHW();
+
+		// DspBoot has no reset API. Reconstruct it in place so the next HI08 word is
+		// interpreted as a fresh boot length rather than ordinary runtime host data.
+		m_boot.~DspBoot();
+		new (&m_boot) dsp56k::DspBoot(m_dsp);
+
+		m_hdiUC.setWriteTxCallback([this](const uint32_t _word)
+		{
+			if(m_boot.hdiWriteTX(_word))
+				onDspBootFinished();
+		});
 	}
 
 	namespace
