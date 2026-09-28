@@ -6,12 +6,15 @@
 #include "mc68k/cpuState.h"
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace
@@ -310,6 +313,7 @@ int main()
 	const bool bootstrapRestarted = md::memorymap::g_flashLow.contains(immediatePc);
 	std::cerr << "[hw-bootstrap] bootstrapRestarted=" << bootstrapRestarted << std::endl;
 	auto installedFlash = flashImmediately;
+	bool functionalSmokePass = false;
 
 	if(bootstrapRestarted)
 	{
@@ -446,20 +450,20 @@ int main()
 
 		if(phase3Quiescent)
 		{
-			std::cerr << "[hw-bootstrap] phase4 cold boot from updater-installed flash" << std::endl;
+			std::cerr << "[hw-bootstrap] phase4 cold boot from direct official-SysEx reconstruction" << std::endl;
 			auto installed = std::make_unique<md::Hardware>(
-				installedFlash, "md-os163-installed-from-official-syx",
+				directInstalledCandidate, "md-os163-direct-from-official-syx",
 				md::MachineModel::Machinedrum,
 				std::vector<uint8_t>{},
 				std::shared_ptr<md::FrontPanelPublisher>{},
-				installedFlash,
+				directInstalledCandidate,
 				std::vector<uint8_t>{},
 				md::FlashSectorOverlay{},
 				std::vector<uint8_t>{},
 				std::vector<uint8_t>{0});
 			if(installed->isValid())
 			{
-				for(unsigned second = 1; second <= 5; ++second)
+				for(unsigned second = 1; second <= 10; ++second)
 				{
 					installed->advance(44100);
 					std::cerr << "[hw-bootstrap] phase4 " << second << "s"
@@ -469,12 +473,98 @@ int main()
 						<< " panel=" << installed->getUC().isPanelHandshakeComplete()
 						<< " midiRx=" << installed->getUC().isMidiReceiveReady()
 						<< std::endl;
+					if(installed->isFirmwareMidiReady())
+						break;
 				}
+
+				const bool ready = installed->isFirmwareMidiReady();
+				std::optional<uint8_t> lockMode;
+				if(ready)
+				{
+					std::vector<synthLib::SMidiEvent> discarded;
+					installed->readMidiOut(discarded);
+					synthLib::SMidiEvent request(synthLib::MidiEventSource::Host);
+					request.sysex =
+						{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x70, 0x20, 0xf7};
+					installed->sendMidi(request);
+					for(unsigned attempt = 0; attempt < 8 && !lockMode; ++attempt)
+					{
+						installed->advance(2048);
+						std::vector<synthLib::SMidiEvent> events;
+						installed->readMidiOut(events);
+						for(const auto& event : events)
+						{
+							const auto& message = event.sysex;
+							if(message.size() == 10
+								&& message[0] == 0xf0 && message[1] == 0x00
+								&& message[2] == 0x20 && message[3] == 0x3c
+								&& message[4] == 0x02 && message[5] == 0x00
+								&& message[6] == 0x72 && message[7] == 0x20
+								&& message[8] <= 1 && message[9] == 0xf7)
+							{
+								lockMode = message[8];
+								break;
+							}
+						}
+					}
+				}
+
+				// Put a known SPS-1UW machine on track 1, then trigger it through the
+				// physical-panel path and require real finite audio at the codec output.
+				float peak = 0.0f;
+				bool finiteAudio = true;
+				const auto trigger = md::panelPacket(md::MachineModel::Machinedrum,
+					md::PanelControl::Trigger1);
+				if(ready && trigger)
+				{
+					synthLib::SMidiEvent assign(synthLib::MidiEventSource::Host);
+					assign.sysex =
+						{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x5b,
+						 0x00, 0x00, 0x01, 0xf7};
+					installed->sendMidi(assign);
+					installed->advance(8192);
+
+					std::array<std::vector<float>, 2> rendered{
+						std::vector<float>(8192), std::vector<float>(8192)};
+					synthLib::TAudioOutputs outputs{};
+					outputs[0] = rendered[0].data();
+					outputs[1] = rendered[1].data();
+					installed->sendPanelEvent(trigger->row, trigger->mask);
+					installed->processAudio(outputs, 4096, 0);
+					installed->sendPanelEvent(trigger->row, 0);
+					outputs[0] += 4096;
+					outputs[1] += 4096;
+					installed->processAudio(outputs, 4096, 0);
+					for(const auto& channel : rendered)
+					{
+						for(const auto sample : channel)
+						{
+							finiteAudio = finiteAudio && std::isfinite(sample);
+							if(std::isfinite(sample))
+								peak = std::max(peak, std::abs(sample));
+						}
+					}
+				}
+
+				functionalSmokePass = ready && lockMode.has_value()
+					&& trigger.has_value() && finiteAudio && peak >= 0.001f;
+				std::cerr << "[hw-bootstrap] functional-smoke"
+					<< " firmwareReady=" << ready
+					<< " statusReply=" << lockMode.has_value();
+				if(lockMode)
+					std::cerr << " lockMode=" << unsigned(*lockMode);
+				std::cerr << " trigger1=" << trigger.has_value()
+					<< " audioFinite=" << finiteAudio
+					<< " audioPeak=" << peak
+					<< " PASS=" << functionalSmokePass
+					<< std::endl;
 			}
 			else
 			{
-				std::cerr << "[hw-bootstrap] phase4 installed flash Hardware rejected" << std::endl;
+				std::cerr << "[hw-bootstrap] phase4 direct reconstructed flash Hardware rejected" << std::endl;
 			}
+		}
+
 		}
 	}
 
@@ -523,6 +613,11 @@ int main()
 		report(*normal, "canonical cold boot 5s");
 	}
 
-	std::cout << "Machinedrum official SysEx bootstrap update/reboot-boundary probe completed\n";
+	if(!functionalSmokePass)
+	{
+		std::cerr << "[hw-bootstrap] functional smoke FAILED" << std::endl;
+		return 9;
+	}
+	std::cout << "Machinedrum official SysEx direct reconstruction functional smoke PASS\n";
 	return 0;
 }
