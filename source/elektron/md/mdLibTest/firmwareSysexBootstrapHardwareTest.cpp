@@ -456,34 +456,59 @@ int main()
 				md::MachineModel::Machinedrum,
 				std::vector<uint8_t>{},
 				std::shared_ptr<md::FrontPanelPublisher>{},
-				directInstalledCandidate,
+				// Leave initialFlash empty: this is a genuine first boot from the
+				// reconstructed firmware baseline, so let the normal UW first-run
+				// initialization/capture path observe what the firmware writes.
+				std::vector<uint8_t>{},
 				std::vector<uint8_t>{},
 				md::FlashSectorOverlay{},
 				std::vector<uint8_t>{},
 				std::vector<uint8_t>{0});
 			if(installed->isValid())
 			{
-				for(unsigned second = 1; second <= 10; ++second)
+				std::cerr << "[hw-bootstrap] phase4 first-run initializationExpected="
+					<< installed->isFactoryFlashInitializationExpected() << std::endl;
+				for(unsigned second = 1; second <= 30
+					&& !installed->isFactoryFlashReadyForReboot(); ++second)
 				{
 					installed->advance(44100);
-					std::cerr << "[hw-bootstrap] phase4 " << second << "s"
+					std::cerr << "[hw-bootstrap] phase4-init " << second << "s"
 						<< " pc=0x" << std::hex << installed->getUC().getPC() << std::dec
 						<< " dsp1=" << installed->getDspMixer().booted()
 						<< " dsp2=" << installed->getDspProducer().booted()
 						<< " panel=" << installed->getUC().isPanelHandshakeComplete()
 						<< " midiRx=" << installed->getUC().isMidiReceiveReady()
+						<< " flashDirty=" << installed->flashDirty()
+						<< " rebootReady=" << installed->isFactoryFlashReadyForReboot()
 						<< std::endl;
-					if(installed->isFirmwareMidiReady())
-						break;
 				}
 
-				const bool ready = installed->isFirmwareMidiReady();
+				const auto firstRunFlash = installed->copyFlashData();
+				const auto firstRunChanged = changedBytes(directInstalledCandidate, firstRunFlash);
+				std::cerr << "[hw-bootstrap] phase4 first-run"
+					<< " rebootReady=" << installed->isFactoryFlashReadyForReboot()
+					<< " flashDirty=" << installed->flashDirty()
+					<< " changedBytes=" << firstRunChanged
+					<< std::endl;
 
-				// MIDI-ready happens before the Machinedrum has finished the rest of its
-				// startup/loading work. The canonical UW firmware fixture waits 20 s before
-				// touching the machine picker or asserting audio, so mirror that proven path.
+				if(installed->isFactoryFlashReadyForReboot())
+				{
+					std::cerr << "[hw-bootstrap] phase5 cold reboot after UW first-run initialization" << std::endl;
+					installed = std::make_unique<md::Hardware>(
+						directInstalledCandidate, "md-os163-direct-from-official-syx",
+						md::MachineModel::Machinedrum,
+						std::vector<uint8_t>{},
+						std::shared_ptr<md::FrontPanelPublisher>{},
+						firstRunFlash,
+						std::vector<uint8_t>{},
+						md::FlashSectorOverlay{},
+						std::vector<uint8_t>{},
+						std::vector<uint8_t>{0});
+				}
+
 				for(uint32_t frames = 0; frames < md::g_samplerate * 20; frames += 128)
 					installed->advance(std::min<uint32_t>(128, md::g_samplerate * 20 - frames));
+				const bool ready = installed->isFirmwareMidiReady();
 				const bool audioReady = installed->isAudioReady();
 
 				std::optional<uint8_t> lockMode;
@@ -577,6 +602,7 @@ int main()
 					&& machineSelected && trigger.has_value()
 					&& finiteAudio && peak >= 0.001f;
 				std::cerr << "[hw-bootstrap] functional-smoke"
+					<< " firstRunChanged=" << firstRunChanged
 					<< " firmwareReady=" << ready
 					<< " audioReady=" << audioReady
 					<< " statusReply=" << lockMode.has_value();
