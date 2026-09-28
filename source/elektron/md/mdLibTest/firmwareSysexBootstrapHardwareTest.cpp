@@ -2,6 +2,7 @@
 #include "mdLib/mdhardware.h"
 #include "mdLib/mdmemorymap.h"
 #include "mdLib/mdpanel.h"
+#include "mdLib/mdstate.h"
 #include "mdLib/mdtypes.h"
 #include "mc68k/cpuState.h"
 
@@ -463,7 +464,7 @@ int main()
 				std::vector<uint8_t>{},
 				md::FlashSectorOverlay{},
 				std::vector<uint8_t>{},
-				std::vector<uint8_t>{0});
+				std::vector<uint8_t>{});
 			if(installed->isValid())
 			{
 				std::cerr << "[hw-bootstrap] phase4 first-run initializationExpected="
@@ -508,19 +509,26 @@ int main()
 					<< " changedBytes=" << firstRunChanged
 					<< std::endl;
 
-				if(installed->isFactoryFlashReadyForReboot())
+				std::vector<uint8_t> factoryCache;
+				const bool factoryCacheOk = installed->isFactoryFlashReadyForReboot()
+					&& md::encodeFactoryFlashCache(factoryCache, firstRunFlash,
+						directInstalledCandidate);
+				std::cerr << "[hw-bootstrap] phase4 factoryCacheOk=" << factoryCacheOk
+					<< " bytes=" << factoryCache.size() << std::endl;
+
+				if(installed->isFactoryFlashReadyForReboot() && factoryCacheOk)
 				{
-					std::cerr << "[hw-bootstrap] phase5 cold reboot after UW first-run initialization" << std::endl;
+					std::cerr << "[hw-bootstrap] phase5 normal cold reboot after UW first-run initialization" << std::endl;
 					installed = std::make_unique<md::Hardware>(
 						directInstalledCandidate, "md-os163-direct-from-official-syx",
 						md::MachineModel::Machinedrum,
 						std::vector<uint8_t>{},
 						std::shared_ptr<md::FrontPanelPublisher>{},
 						firstRunFlash,
-						std::vector<uint8_t>{},
+						factoryCache,
 						md::FlashSectorOverlay{},
 						std::vector<uint8_t>{},
-						std::vector<uint8_t>{0});
+						std::vector<uint8_t>{});
 				}
 
 				for(uint32_t frames = 0; frames < md::g_samplerate * 20; frames += 128)
@@ -559,9 +567,40 @@ int main()
 					}
 				}
 
-				// Exercise the exact known-good ROM-machine path used by mdUwFirmwareTest:
-				// open machine picker, walk to ROM, select the current factory sample,
-				// assign it to track 1, then trigger through the real panel transport.
+				// First probe the rebooted factory-default kit. This distinguishes a dead
+				// codec/voice path from a problem specific to the UW ROM sample family.
+				auto renderTriggerPeak = [&](const md::PanelPacket& packet,
+					bool& finite)
+				{
+					std::array<std::vector<float>, 2> rendered{
+						std::vector<float>(8192), std::vector<float>(8192)};
+					synthLib::TAudioOutputs outputs{};
+					outputs[0] = rendered[0].data();
+					outputs[1] = rendered[1].data();
+					installed->sendPanelEvent(packet.row, packet.mask);
+					installed->processAudio(outputs, 4096, 0);
+					installed->sendPanelEvent(packet.row, 0);
+					outputs[0] += 4096;
+					outputs[1] += 4096;
+					installed->processAudio(outputs, 4096, 0);
+					float result = 0.0f;
+					finite = true;
+					for(const auto& channel : rendered)
+						for(const auto sample : channel)
+						{
+							finite = finite && std::isfinite(sample);
+							if(std::isfinite(sample))
+								result = std::max(result, std::abs(sample));
+						}
+					return result;
+				};
+
+				const auto trigger = md::panelPacket(md::MachineModel::Machinedrum,
+					md::PanelControl::Trigger1);
+				bool defaultFinite = true;
+				const float defaultPeak = ready && audioReady && trigger
+					? renderTriggerPeak(*trigger, defaultFinite) : 0.0f;
+
 				auto tapControl = [&](const md::PanelControl control)
 				{
 					const auto packet = md::panelPacket(md::MachineModel::Machinedrum, control);
@@ -573,49 +612,46 @@ int main()
 					installed->advance(4096);
 					return true;
 				};
+				auto sameLcd = [](const md::FrontPanel& left, const md::FrontPanel& right)
+				{
+					for(uint32_t y = 0; y < md::FrontPanel::g_lcdHeight; ++y)
+						for(uint32_t x = 0; x < md::FrontPanel::g_lcdWidth; ++x)
+							if(left.getLcdPixel(x, y) != right.getLcdPixel(x, y))
+								return false;
+					return true;
+				};
 
 				bool machineSelected = ready && audioReady
 					&& tapControl(md::PanelControl::Kit)
 					&& tapControl(md::PanelControl::Down)
 					&& tapControl(md::PanelControl::Enter);
-				for(uint32_t family = 0; family < 7 && machineSelected; ++family)
+				for(uint32_t family = 0; family < 6 && machineSelected; ++family)
 					machineSelected = tapControl(md::PanelControl::Down);
+				const auto ctr = installed->getFrontPanelSnapshot();
+				machineSelected = machineSelected && tapControl(md::PanelControl::Down);
+				const auto romFamily = installed->getFrontPanelSnapshot();
+				machineSelected = machineSelected && tapControl(md::PanelControl::Down);
+				const auto ramFamily = installed->getFrontPanelSnapshot();
+				machineSelected = machineSelected && tapControl(md::PanelControl::Down);
+				const auto afterRam = installed->getFrontPanelSnapshot();
+				const bool pickerFamiliesOk = machineSelected
+					&& !sameLcd(ctr, romFamily)
+					&& !sameLcd(romFamily, ramFamily)
+					&& sameLcd(ramFamily, afterRam);
 				if(machineSelected)
 				{
-					machineSelected = tapControl(md::PanelControl::Right)
+					machineSelected = tapControl(md::PanelControl::Up)
+						&& tapControl(md::PanelControl::Right)
 						&& tapControl(md::PanelControl::Enter)
 						&& tapControl(md::PanelControl::Exit);
 				}
 
-				float peak = 0.0f;
 				bool finiteAudio = true;
-				const auto trigger = md::panelPacket(md::MachineModel::Machinedrum,
-					md::PanelControl::Trigger1);
-				if(machineSelected && trigger)
-				{
-					std::array<std::vector<float>, 2> rendered{
-						std::vector<float>(8192), std::vector<float>(8192)};
-					synthLib::TAudioOutputs outputs{};
-					outputs[0] = rendered[0].data();
-					outputs[1] = rendered[1].data();
-					installed->sendPanelEvent(trigger->row, trigger->mask);
-					installed->processAudio(outputs, 4096, 0);
-					installed->sendPanelEvent(trigger->row, 0);
-					outputs[0] += 4096;
-					outputs[1] += 4096;
-					installed->processAudio(outputs, 4096, 0);
-					for(const auto& channel : rendered)
-					{
-						for(const auto sample : channel)
-						{
-							finiteAudio = finiteAudio && std::isfinite(sample);
-							if(std::isfinite(sample))
-								peak = std::max(peak, std::abs(sample));
-						}
-					}
-				}
+				const float peak = machineSelected && trigger
+					? renderTriggerPeak(*trigger, finiteAudio) : 0.0f;
 
 				functionalSmokePass = ready && audioReady && lockMode.has_value()
+					&& factoryCacheOk && pickerFamiliesOk
 					&& machineSelected && trigger.has_value()
 					&& finiteAudio && peak >= 0.001f;
 				std::cerr << "[hw-bootstrap] functional-smoke"
@@ -625,7 +661,11 @@ int main()
 					<< " statusReply=" << lockMode.has_value();
 				if(lockMode)
 					std::cerr << " lockMode=" << unsigned(*lockMode);
-				std::cerr << " machineSelected=" << machineSelected
+				std::cerr << " factoryCache=" << factoryCacheOk
+					<< " defaultFinite=" << defaultFinite
+					<< " defaultPeak=" << defaultPeak
+					<< " pickerFamilies=" << pickerFamiliesOk
+					<< " machineSelected=" << machineSelected
 					<< " trigger1=" << trigger.has_value()
 					<< " audioFinite=" << finiteAudio
 					<< " audioPeak=" << peak
