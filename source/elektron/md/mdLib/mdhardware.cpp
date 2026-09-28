@@ -620,6 +620,13 @@ namespace md
 		m_uc.setMidiTransmitTap({});
 	}
 
+	void Hardware::prepareDspsForBootstrapReload()
+	{
+		m_dspMixer.prepareForBootstrapReload();
+		m_dspProducer.prepareForBootstrapReload();
+		notifyHostPumpStateChanged();
+	}
+
 	bool Hardware::isValid() const
 	{
 		return m_rom.isValid()
