@@ -57,7 +57,12 @@ namespace md
 
 		bool     booted() const { return m_schedRunnable.load(std::memory_order_acquire); }
 		void onDspBootFinished();
-		void prepareForBootstrapReload();
+		void prepareForBootstrapReload(bool _holdAfterBoot = false);
+		bool bootstrapReloadFinished() const { return m_bootstrapReloadFinished; }
+		uint32_t bootstrapReloadLength() const { return m_boot.getLength(); }
+		uint32_t bootstrapReloadInitialPc() const { return m_boot.getInitialPC(); }
+		uint64_t bootstrapReloadWordsSeen() const { return m_bootstrapReloadWordsSeen; }
+		uint64_t bootstrapReloadPostBootWords() const { return m_bootstrapReloadPostBootWords; }
 
 		// Continuously drain this DSP's HOTX into the UC-facing HI08 receive queue, bounded so the
 		// queue never exceeds _maxUcWords. Returns the number of words moved. Safe to call from the
