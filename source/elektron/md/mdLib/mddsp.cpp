@@ -217,6 +217,11 @@ namespace md
 		m_hdiUC.clearRx();
 
 		m_dsp.resetHW();
+		// resetHW() resets registers/peripherals but intentionally keeps compiled JIT
+		// chains. That is correct for a normal DSP hardware reset, but the updater is
+		// about to upload a different bootstrap image into P memory. Drop every old
+		// block now so no stale branch target can survive into the second boot.
+		m_dsp.getJit().destroyAllBlocks();
 
 		// DspBoot has no reset API. Reconstruct it in place so the next HI08 word is
 		// interpreted as a fresh boot length rather than ordinary runtime host data.
