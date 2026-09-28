@@ -312,76 +312,50 @@ int main()
 
 	if(bootstrapRestarted)
 	{
-		// The real updater has crossed a warm-reboot boundary while retaining external
-		// main RAM. Rebuild the whole machine so DSP1/DSP2 start from reset too, then
-		// restore the retained RAM before restarting the ColdFire bootstrap.
-		std::cerr << "[hw-bootstrap] phase3 fresh-machine transition with retained volatile RAM" << std::endl;
-		hw.reset();
+		// This is not a ColdFire reset: PC has returned to bootstrap code while the
+		// received transport remains in MAIN RAM. Preserve the exact ColdFire/SIM/RAM
+		// state and only hardware-reset the two DSPs, matching the updater's next step.
+		std::cerr << "[hw-bootstrap] phase3 same-machine DSP bootstrap reload" << std::endl;
+		hw->prepareDspsForBootstrapReload();
 
-		auto rebooted = std::make_unique<md::Hardware>(
-			flashImmediately, "md-os163-updater-warm-reboot",
-			md::MachineModel::Machinedrum,
-			patchImmediately,
-			std::shared_ptr<md::FrontPanelPublisher>{},
-			flashImmediately,
-			std::vector<uint8_t>{},
-			md::FlashSectorOverlay{},
-			std::vector<uint8_t>{},
-			std::vector<uint8_t>{0});
-		if(!rebooted->isValid())
-		{
-			std::cerr << "[hw-bootstrap] failed to rebuild transition machine" << std::endl;
-			return 8;
-		}
-
-		auto& rebootUc = rebooted->getUC();
-		if(!rebootUc.replaceMainRam(mainImmediately)
-			|| !rebootUc.replaceLoaderRam(loaderImmediately)
-			|| !rebootUc.replaceInternalSram(internalImmediately))
-		{
-			std::cerr << "[hw-bootstrap] failed to restore retained volatile RAM" << std::endl;
-			return 8;
-		}
-		uint64_t rebootProgramWords = 0;
-		uint64_t rebootEraseSectors = 0;
-		rebootUc.setFlashOperationObserver([&](const md::FlashCommandDecoder::Operation& op,
+		uint64_t phase3ProgramWords = 0;
+		uint64_t phase3EraseSectors = 0;
+		uc.setFlashOperationObserver([&](const md::FlashCommandDecoder::Operation& op,
 			const uint64_t)
 		{
 			if(op.type == md::FlashCommandDecoder::Operation::Type::ProgramWord)
-				++rebootProgramWords;
+				++phase3ProgramWords;
 			else if(op.type == md::FlashCommandDecoder::Operation::Type::EraseSector)
-				++rebootEraseSectors;
+				++phase3EraseSectors;
 		});
 
-		rebootUc.reset();
-		rebootUc.exec();
-		for(unsigned second = 1; second <= 5; ++second)
+		for(unsigned second = 1; second <= 10; ++second)
 		{
-			rebooted->advance(44100);
-			std::cerr << "[hw-bootstrap] warm-reboot " << second << "s"
-				<< " pc=0x" << std::hex << rebootUc.getPC() << std::dec
-				<< " dsp1=" << rebooted->getDspMixer().booted()
-				<< " dsp2=" << rebooted->getDspProducer().booted()
-				<< " panel=" << rebootUc.isPanelHandshakeComplete()
-				<< " programWords=" << rebootProgramWords
-				<< " eraseSectors=" << rebootEraseSectors
+			hw->advance(44100);
+			std::cerr << "[hw-bootstrap] phase3 " << second << "s"
+				<< " pc=0x" << std::hex << uc.getPC() << std::dec
+				<< " dsp1=" << hw->getDspMixer().booted()
+				<< " dsp2=" << hw->getDspProducer().booted()
+				<< " panel=" << uc.isPanelHandshakeComplete()
+				<< " programWords=" << phase3ProgramWords
+				<< " eraseSectors=" << phase3EraseSectors
 				<< std::endl;
-			if(rebootProgramWords || rebootEraseSectors)
+			if(phase3ProgramWords || phase3EraseSectors)
 				break;
 		}
 
-		const auto rebootFlash = rebootUc.copyFlashData();
-		uint64_t rebootFnv = 14695981039346656037ull;
-		for(const auto byte : rebootFlash)
+		const auto phase3Flash = uc.copyFlashData();
+		uint64_t phase3Fnv = 14695981039346656037ull;
+		for(const auto byte : phase3Flash)
 		{
-			rebootFnv ^= byte;
-			rebootFnv *= 1099511628211ull;
+			phase3Fnv ^= byte;
+			phase3Fnv *= 1099511628211ull;
 		}
-		std::cerr << "[hw-bootstrap] warm-reboot flashFnv=0x" << std::hex << rebootFnv
+		std::cerr << "[hw-bootstrap] phase3 flashFnv=0x" << std::hex << phase3Fnv
 			<< " canonical=0x" << md::g_mdOs163Fingerprint << std::dec
-			<< " canonicalImage=" << (rebootFnv == md::g_mdOs163Fingerprint)
-			<< " programWords=" << rebootProgramWords
-			<< " eraseSectors=" << rebootEraseSectors
+			<< " canonicalImage=" << (phase3Fnv == md::g_mdOs163Fingerprint)
+			<< " programWords=" << phase3ProgramWords
+			<< " eraseSectors=" << phase3EraseSectors
 			<< std::endl;
 	}
 
