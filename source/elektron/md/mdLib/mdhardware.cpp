@@ -137,7 +137,7 @@ namespace md
 			m_midiSysexTransfer.observeTransmitByte(_byte);
 		});
 		m_mdOnDemandRendezvousArmPending = !isMonomachine()
-			&& m_firmwareFingerprint == g_mdOs163Fingerprint;
+			&& isMdOs163Fingerprint(m_firmwareFingerprint);
 
 		// Wake the scheduler host pump when either DSP produces a host word or
 		// the UC-side port state changes. The pump itself runs only on a wake
