@@ -620,7 +620,7 @@ namespace md
 		m_uc.setMidiTransmitTap({});
 	}
 
-	void Hardware::prepareDspsForBootstrapReload()
+	void Hardware::prepareDspsForBootstrapReload(const bool _holdAfterBoot)
 	{
 		// A DSP that is between hardware reset and boot completion must be parked.
 		// The normal scheduler latches an origin the first time booted() becomes true.
@@ -636,8 +636,8 @@ namespace md
 		}
 		m_schedInLinkDelivery = false;
 
-		m_dspMixer.prepareForBootstrapReload();
-		m_dspProducer.prepareForBootstrapReload();
+		m_dspMixer.prepareForBootstrapReload(_holdAfterBoot);
+		m_dspProducer.prepareForBootstrapReload(_holdAfterBoot);
 		notifyHostPumpStateChanged();
 	}
 
