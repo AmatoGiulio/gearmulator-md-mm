@@ -87,7 +87,7 @@ namespace md
 		bool supportsRamRecordingMode() const
 		{
 			return m_model == MachineModel::Machinedrum
-				&& m_firmwareFingerprint == g_mdOs163Fingerprint;
+				&& isMdOs163Fingerprint(m_firmwareFingerprint);
 		}
 		void requestRamRecordingMode(RamRecordingMode _mode);
 		RamRecordingMode requestedRamRecordingMode() const { return m_ramRecordingMode; }
