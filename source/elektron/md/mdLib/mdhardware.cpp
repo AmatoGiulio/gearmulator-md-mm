@@ -622,6 +622,20 @@ namespace md
 
 	void Hardware::prepareDspsForBootstrapReload()
 	{
+		// A DSP that is between hardware reset and boot completion must be parked.
+		// The normal scheduler latches an origin the first time booted() becomes true.
+		// Clear the old origins before resetting the DSPs; otherwise schedStep() still
+		// considers them runnable and executes PC=0 against stale/partial P memory.
+		for(size_t i = 0; i < 2; ++i)
+		{
+			m_schedDspOriginLatched[i] = false;
+			m_schedDspOriginFrame[i] = 0.0;
+			m_schedDspOriginCycles[i] = 0;
+			m_schedDspOriginUcCycles[i] = 0;
+			m_mmBpSinceUcCycles[i] = 0;
+		}
+		m_schedInLinkDelivery = false;
+
 		m_dspMixer.prepareForBootstrapReload();
 		m_dspProducer.prepareForBootstrapReload();
 		notifyHostPumpStateChanged();
