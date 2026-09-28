@@ -564,8 +564,6 @@ int main()
 				std::cerr << "[hw-bootstrap] phase4 direct reconstructed flash Hardware rejected" << std::endl;
 			}
 		}
-
-		}
 	}
 
 	std::cerr << "[hw-bootstrap] midiTx captured=" << midiTx.size()
