@@ -391,18 +391,58 @@ int main()
 			installedFlash.size() >= 0x100000u + image.factoryWaveforms.size()
 			&& std::equal(image.factoryWaveforms.begin(), image.factoryWaveforms.end(),
 				installedFlash.begin() + 0x100000u);
+
+		const auto installedTransportOffset = findOffset(installedFlash, image.decodedTransport);
+		auto directInstalledCandidate = bootstrapFlash;
+		constexpr size_t updaterStoreOffset = 0x4000;
+		if(directInstalledCandidate.size() >= updaterStoreOffset + image.decodedTransport.size())
+			std::copy(image.decodedTransport.begin(), image.decodedTransport.end(),
+				directInstalledCandidate.begin() + updaterStoreOffset);
+		const auto directCandidateMismatchCount =
+			changedBytes(directInstalledCandidate, installedFlash);
+		size_t directCandidateFirstMismatch = installedFlash.size();
+		size_t directCandidateLastMismatch = 0;
+		if(directInstalledCandidate.size() == installedFlash.size())
+		{
+			for(size_t i = 0; i < installedFlash.size(); ++i)
+			{
+				if(directInstalledCandidate[i] == installedFlash[i])
+					continue;
+				directCandidateFirstMismatch = std::min(directCandidateFirstMismatch, i);
+				directCandidateLastMismatch = i;
+			}
+		}
 		std::cerr << "[hw-bootstrap] phase3 flashFnv=0x" << std::hex << phase3Fnv
 			<< " canonical=0x" << md::g_mdOs163Fingerprint << std::dec
 			<< " canonicalImage=" << (phase3Fnv == md::g_mdOs163Fingerprint)
 			<< " quiescent=" << phase3Quiescent
 			<< " factoryWaveformsMatch=" << factoryWaveformsMatch
-			<< " programWords=" << phase3ProgramWords
+			<< " transportFlashOffset=" << installedTransportOffset
+			<< " directCandidateMismatches=" << directCandidateMismatchCount;
+		if(directCandidateMismatchCount != 0
+			&& directCandidateFirstMismatch != installedFlash.size())
+		{
+			std::cerr << " directMismatchRange=[0x" << std::hex
+				<< directCandidateFirstMismatch << ",0x" << directCandidateLastMismatch
+				<< "]" << std::dec;
+		}
+		std::cerr << " programWords=" << phase3ProgramWords
 			<< " eraseSectors=" << phase3EraseSectors
 			<< " lastFlashCycle=" << phase3LastFlashCycle;
 		if(phase3ProgramWords || phase3EraseSectors)
 			std::cerr << " flashRange=[0x" << std::hex << phase3MinFlashOffset
 				<< ",0x" << phase3MaxFlashOffset << "]" << std::dec;
 		std::cerr << std::endl;
+		std::cerr << "[hw-bootstrap] install-layout"
+			<< " bootstrapPreserved0x4000="
+			<< (installedFlash.size() >= updaterStoreOffset
+				&& bootstrapFlash.size() >= updaterStoreOffset
+				&& std::equal(installedFlash.begin(),
+					installedFlash.begin() + updaterStoreOffset, bootstrapFlash.begin()))
+			<< " expectedProgramBytes=" << image.decodedTransport.size()
+			<< " observedProgramBytes=" << (phase3ProgramWords * 2)
+			<< " directCandidateExact=" << (directCandidateMismatchCount == 0)
+			<< std::endl;
 
 		if(phase3Quiescent)
 		{
