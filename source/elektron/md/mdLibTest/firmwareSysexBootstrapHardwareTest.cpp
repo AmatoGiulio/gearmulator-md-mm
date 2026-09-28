@@ -317,7 +317,11 @@ int main()
 		// received transport remains in MAIN RAM. Preserve the exact ColdFire/SIM/RAM
 		// state and only hardware-reset the two DSPs, matching the updater's next step.
 		std::cerr << "[hw-bootstrap] phase3 same-machine DSP bootstrap reload" << std::endl;
-		hw->prepareDspsForBootstrapReload();
+		std::cerr << "[hw-bootstrap] expected decoded DSP words dsp1="
+			<< (image.dsp1.size() / 3) << " dsp2=" << (image.dsp2.size() / 3) << std::endl;
+		// Do not execute the reloaded DSPs yet. First prove what boot image the
+		// ColdFire installer is actually sending and allow flash programming to finish.
+		hw->prepareDspsForBootstrapReload(true);
 
 		uint64_t phase3ProgramWords = 0;
 		uint64_t phase3EraseSectors = 0;
@@ -357,6 +361,16 @@ int main()
 				<< " programWords=" << phase3ProgramWords
 				<< " eraseSectors=" << phase3EraseSectors
 				<< " idleSeconds=" << idleSeconds
+				<< " d1BootDone=" << hw->getDspMixer().bootstrapReloadFinished()
+				<< " d1Len=" << hw->getDspMixer().bootstrapReloadLength()
+				<< " d1Pc=0x" << std::hex << hw->getDspMixer().bootstrapReloadInitialPc() << std::dec
+				<< " d1Words=" << hw->getDspMixer().bootstrapReloadWordsSeen()
+				<< " d1Post=" << hw->getDspMixer().bootstrapReloadPostBootWords()
+				<< " d2BootDone=" << hw->getDspProducer().bootstrapReloadFinished()
+				<< " d2Len=" << hw->getDspProducer().bootstrapReloadLength()
+				<< " d2Pc=0x" << std::hex << hw->getDspProducer().bootstrapReloadInitialPc() << std::dec
+				<< " d2Words=" << hw->getDspProducer().bootstrapReloadWordsSeen()
+				<< " d2Post=" << hw->getDspProducer().bootstrapReloadPostBootWords()
 				<< std::endl;
 
 			if(flashOps != 0 && idleSeconds >= 2)
