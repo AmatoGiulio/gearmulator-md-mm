@@ -250,8 +250,8 @@ int main()
 	const auto immediatePc = uc.getPC();
 	const auto immediateSp = uc.getAReg(7);
 	const auto immediateVbr = uc.getCpuState()->vbr;
-	const auto immediateMbar = uc.getCpuState()->mbar;
-	const auto immediateRambar = uc.getCpuState()->rambar;
+	const auto immediateMbar = uc.getCpuState()->cf_mbar;
+	const auto immediateRambar = uc.getCpuState()->cf_rambar;
 	const auto consumedImmediately = uc.midiRxConsumedCount();
 	const auto overflowImmediately = uc.midiRxOverflowCount();
 	const auto dsp1Immediately = hw->getDspMixer().booted();
