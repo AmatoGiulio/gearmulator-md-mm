@@ -101,6 +101,10 @@ namespace md
 
 		uint64_t m_mmHostTxCycle = 0;
 		TimedHostRx m_timedHostRx;
+		bool m_bootstrapReloadHold = false;
+		bool m_bootstrapReloadFinished = false;
+		uint64_t m_bootstrapReloadWordsSeen = 0;
+		uint64_t m_bootstrapReloadPostBootWords = 0;
 
 	};
 }
