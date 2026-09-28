@@ -207,7 +207,7 @@ namespace md
 		m_schedRunnable.store(true, std::memory_order_release);
 	}
 
-	void Dsp::prepareForBootstrapReload()
+	void Dsp::prepareForBootstrapReload(const bool _holdAfterBoot)
 	{
 		// The Machinedrum updater returns to the ColdFire bootstrap and hardware-resets
 		// both DSPs before uploading their boot images again. Keep the ColdFire CPU/SIM
@@ -215,12 +215,14 @@ namespace md
 		m_schedRunnable.store(false, std::memory_order_release);
 		m_timedHostRx = {};
 		m_hdiUC.clearRx();
+		m_bootstrapReloadHold = _holdAfterBoot;
+		m_bootstrapReloadFinished = false;
+		m_bootstrapReloadWordsSeen = 0;
+		m_bootstrapReloadPostBootWords = 0;
 
 		m_dsp.resetHW();
 		// resetHW() resets registers/peripherals but intentionally keeps compiled JIT
-		// chains. That is correct for a normal DSP hardware reset, but the updater is
-		// about to upload a different bootstrap image into P memory. Drop every old
-		// block now so no stale branch target can survive into the second boot.
+		// chains. The updater may replace P memory completely.
 		m_dsp.getJit().destroyAllBlocks();
 
 		// DspBoot has no reset API. Reconstruct it in place so the next HI08 word is
@@ -230,8 +232,23 @@ namespace md
 
 		m_hdiUC.setWriteTxCallback([this](const uint32_t _word)
 		{
+			++m_bootstrapReloadWordsSeen;
 			if(m_boot.hdiWriteTX(_word))
+			{
+				m_bootstrapReloadFinished = true;
+				if(m_bootstrapReloadHold)
+				{
+					// Diagnostic mode: keep the uploaded DSP parked. This lets the ColdFire
+					// installer finish even if the second DSP image is malformed or not meant
+					// to execute yet, while still exposing the exact boot header we received.
+					m_hdiUC.setWriteTxCallback([this](const uint32_t)
+					{
+						++m_bootstrapReloadPostBootWords;
+					});
+					return;
+				}
 				onDspBootFinished();
+			}
 		});
 	}
 
