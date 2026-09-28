@@ -468,19 +468,36 @@ int main()
 			{
 				std::cerr << "[hw-bootstrap] phase4 first-run initializationExpected="
 					<< installed->isFactoryFlashInitializationExpected() << std::endl;
-				for(unsigned second = 1; second <= 30
-					&& !installed->isFactoryFlashReadyForReboot(); ++second)
+				// Factory-flash capture is intentionally sliced: one 64 KiB sector per
+				// Hardware::advance() call. A one-second advance therefore captures only
+				// one sector and makes an 8 MiB image take >2 minutes. Use the same
+				// 128-frame cadence as mdUwFirmwareTest so the bounded capture path can
+				// complete while preserving normal emulation timing.
+				constexpr uint32_t initBlock = 128;
+				constexpr uint32_t initDeadlineFrames = md::g_samplerate * 30;
+				uint32_t initFrames = 0;
+				uint32_t nextInitReport = md::g_samplerate;
+				while(initFrames < initDeadlineFrames
+					&& !installed->isFactoryFlashReadyForReboot())
 				{
-					installed->advance(44100);
-					std::cerr << "[hw-bootstrap] phase4-init " << second << "s"
-						<< " pc=0x" << std::hex << installed->getUC().getPC() << std::dec
-						<< " dsp1=" << installed->getDspMixer().booted()
-						<< " dsp2=" << installed->getDspProducer().booted()
-						<< " panel=" << installed->getUC().isPanelHandshakeComplete()
-						<< " midiRx=" << installed->getUC().isMidiReceiveReady()
-						<< " flashDirty=" << installed->flashDirty()
-						<< " rebootReady=" << installed->isFactoryFlashReadyForReboot()
-						<< std::endl;
+					const auto count = std::min(initBlock, initDeadlineFrames - initFrames);
+					installed->advance(count);
+					initFrames += count;
+					if(initFrames >= nextInitReport
+						|| installed->isFactoryFlashReadyForReboot())
+					{
+						std::cerr << "[hw-bootstrap] phase4-init "
+							<< (initFrames / md::g_samplerate) << "s"
+							<< " pc=0x" << std::hex << installed->getUC().getPC() << std::dec
+							<< " dsp1=" << installed->getDspMixer().booted()
+							<< " dsp2=" << installed->getDspProducer().booted()
+							<< " panel=" << installed->getUC().isPanelHandshakeComplete()
+							<< " midiRx=" << installed->getUC().isMidiReceiveReady()
+							<< " flashDirty=" << installed->flashDirty()
+							<< " rebootReady=" << installed->isFactoryFlashReadyForReboot()
+							<< std::endl;
+						nextInitReport += md::g_samplerate;
+					}
 				}
 
 				const auto firstRunFlash = installed->copyFlashData();
