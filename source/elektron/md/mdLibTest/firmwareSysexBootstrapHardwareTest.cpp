@@ -309,6 +309,7 @@ int main()
 	// accepted and where its decoded image lives.
 	const bool bootstrapRestarted = md::memorymap::g_flashLow.contains(immediatePc);
 	std::cerr << "[hw-bootstrap] bootstrapRestarted=" << bootstrapRestarted << std::endl;
+	auto installedFlash = flashImmediately;
 
 	if(bootstrapRestarted)
 	{
@@ -320,18 +321,34 @@ int main()
 
 		uint64_t phase3ProgramWords = 0;
 		uint64_t phase3EraseSectors = 0;
+		uint64_t phase3LastFlashCycle = 0;
+		uint32_t phase3MinFlashOffset = 0xffffffffu;
+		uint32_t phase3MaxFlashOffset = 0;
 		uc.setFlashOperationObserver([&](const md::FlashCommandDecoder::Operation& op,
-			const uint64_t)
+			const uint64_t cycle)
 		{
+			phase3LastFlashCycle = cycle;
+			phase3MinFlashOffset = std::min(phase3MinFlashOffset, op.offset);
+			phase3MaxFlashOffset = std::max(phase3MaxFlashOffset, op.offset);
 			if(op.type == md::FlashCommandDecoder::Operation::Type::ProgramWord)
 				++phase3ProgramWords;
 			else if(op.type == md::FlashCommandDecoder::Operation::Type::EraseSector)
 				++phase3EraseSectors;
 		});
 
-		for(unsigned second = 1; second <= 10; ++second)
+		uint64_t previousFlashOps = 0;
+		unsigned idleSeconds = 0;
+		bool phase3Quiescent = false;
+		for(unsigned second = 1; second <= 30; ++second)
 		{
 			hw->advance(44100);
+			const auto flashOps = phase3ProgramWords + phase3EraseSectors;
+			if(flashOps != 0 && flashOps == previousFlashOps)
+				++idleSeconds;
+			else
+				idleSeconds = 0;
+			previousFlashOps = flashOps;
+
 			std::cerr << "[hw-bootstrap] phase3 " << second << "s"
 				<< " pc=0x" << std::hex << uc.getPC() << std::dec
 				<< " dsp1=" << hw->getDspMixer().booted()
@@ -339,24 +356,72 @@ int main()
 				<< " panel=" << uc.isPanelHandshakeComplete()
 				<< " programWords=" << phase3ProgramWords
 				<< " eraseSectors=" << phase3EraseSectors
+				<< " idleSeconds=" << idleSeconds
 				<< std::endl;
-			if(phase3ProgramWords || phase3EraseSectors)
+
+			if(flashOps != 0 && idleSeconds >= 2)
+			{
+				phase3Quiescent = true;
 				break;
+			}
 		}
 
-		const auto phase3Flash = uc.copyFlashData();
+		installedFlash = uc.copyFlashData();
 		uint64_t phase3Fnv = 14695981039346656037ull;
-		for(const auto byte : phase3Flash)
+		for(const auto byte : installedFlash)
 		{
 			phase3Fnv ^= byte;
 			phase3Fnv *= 1099511628211ull;
 		}
+		const bool factoryWaveformsMatch =
+			installedFlash.size() >= 0x100000u + image.factoryWaveforms.size()
+			&& std::equal(image.factoryWaveforms.begin(), image.factoryWaveforms.end(),
+				installedFlash.begin() + 0x100000u);
 		std::cerr << "[hw-bootstrap] phase3 flashFnv=0x" << std::hex << phase3Fnv
 			<< " canonical=0x" << md::g_mdOs163Fingerprint << std::dec
 			<< " canonicalImage=" << (phase3Fnv == md::g_mdOs163Fingerprint)
+			<< " quiescent=" << phase3Quiescent
+			<< " factoryWaveformsMatch=" << factoryWaveformsMatch
 			<< " programWords=" << phase3ProgramWords
 			<< " eraseSectors=" << phase3EraseSectors
-			<< std::endl;
+			<< " lastFlashCycle=" << phase3LastFlashCycle;
+		if(phase3ProgramWords || phase3EraseSectors)
+			std::cerr << " flashRange=[0x" << std::hex << phase3MinFlashOffset
+				<< ",0x" << phase3MaxFlashOffset << "]" << std::dec;
+		std::cerr << std::endl;
+
+		if(phase3Quiescent)
+		{
+			std::cerr << "[hw-bootstrap] phase4 cold boot from updater-installed flash" << std::endl;
+			auto installed = std::make_unique<md::Hardware>(
+				installedFlash, "md-os163-installed-from-official-syx",
+				md::MachineModel::Machinedrum,
+				std::vector<uint8_t>{},
+				std::shared_ptr<md::FrontPanelPublisher>{},
+				installedFlash,
+				std::vector<uint8_t>{},
+				md::FlashSectorOverlay{},
+				std::vector<uint8_t>{},
+				std::vector<uint8_t>{0});
+			if(installed->isValid())
+			{
+				for(unsigned second = 1; second <= 5; ++second)
+				{
+					installed->advance(44100);
+					std::cerr << "[hw-bootstrap] phase4 " << second << "s"
+						<< " pc=0x" << std::hex << installed->getUC().getPC() << std::dec
+						<< " dsp1=" << installed->getDspMixer().booted()
+						<< " dsp2=" << installed->getDspProducer().booted()
+						<< " panel=" << installed->getUC().isPanelHandshakeComplete()
+						<< " midiRx=" << installed->getUC().isMidiReceiveReady()
+						<< std::endl;
+				}
+			}
+			else
+			{
+				std::cerr << "[hw-bootstrap] phase4 installed flash Hardware rejected" << std::endl;
+			}
+		}
 	}
 
 	std::cerr << "[hw-bootstrap] midiTx captured=" << midiTx.size()
@@ -372,7 +437,6 @@ int main()
 			<< static_cast<unsigned>(panelTx[i]);
 	std::cerr << std::dec << std::endl;
 
-	const auto installedFlash = flashImmediately;
 	uint64_t fingerprint = 14695981039346656037ull;
 	for(const auto byte : installedFlash)
 	{
