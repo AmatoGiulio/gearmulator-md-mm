@@ -53,5 +53,15 @@ namespace md
 	//   elektron_sps1-1uw_os1.63.bin: a872a2f3527063673d6ea6d3080c4c62ef0cadc1
 	//   elektron_sfx6-60_os1.32b.bin: 11a37460a5f47fd1a4d911414288690e6e7da605
 	static constexpr uint64_t g_mdOs163Fingerprint = 0x33b7c1a9e29f43fdull;
+	// Exact 8 MiB image reconstructed from Elektron's official SPS-1UW OS 1.63
+	// updater: persistent 16 KiB bootstrap + decoded transport at 0x4000 + the
+	// official factory waveform bank. The updater-emulation probe proved this is
+	// byte-for-byte identical to the flash image programmed by the updater.
+	static constexpr uint64_t g_mdOs163OfficialSyxFingerprint = 0x6146bc7a7cf67fa0ull;
+	constexpr bool isMdOs163Fingerprint(const uint64_t _fingerprint)
+	{
+		return _fingerprint == g_mdOs163Fingerprint
+			|| _fingerprint == g_mdOs163OfficialSyxFingerprint;
+	}
 	static constexpr uint64_t g_mmOs132bFingerprint = 0xe1c1b461b6d0f21bull;
 }
