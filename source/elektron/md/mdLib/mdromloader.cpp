@@ -30,7 +30,7 @@ namespace md
 			return false;
 		return _model == MachineModel::Monomachine
 			? _fingerprint == g_mmOs132bFingerprint
-			: _fingerprint == g_mdOs163Fingerprint;
+			: isMdOs163Fingerprint(_fingerprint);
 	}
 
 	bool RomLoader::isRomForModel(const std::vector<uint8_t>& _data,
