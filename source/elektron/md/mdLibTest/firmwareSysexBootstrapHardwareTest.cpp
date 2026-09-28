@@ -478,6 +478,14 @@ int main()
 				}
 
 				const bool ready = installed->isFirmwareMidiReady();
+
+				// MIDI-ready happens before the Machinedrum has finished the rest of its
+				// startup/loading work. The canonical UW firmware fixture waits 20 s before
+				// touching the machine picker or asserting audio, so mirror that proven path.
+				for(uint32_t frames = 0; frames < md::g_samplerate * 20; frames += 128)
+					installed->advance(std::min<uint32_t>(128, md::g_samplerate * 20 - frames));
+				const bool audioReady = installed->isAudioReady();
+
 				std::optional<uint8_t> lockMode;
 				if(ready)
 				{
@@ -509,21 +517,40 @@ int main()
 					}
 				}
 
-				// Put a known SPS-1UW machine on track 1, then trigger it through the
-				// physical-panel path and require real finite audio at the codec output.
+				// Exercise the exact known-good ROM-machine path used by mdUwFirmwareTest:
+				// open machine picker, walk to ROM, select the current factory sample,
+				// assign it to track 1, then trigger through the real panel transport.
+				auto tapControl = [&](const md::PanelControl control)
+				{
+					const auto packet = md::panelPacket(md::MachineModel::Machinedrum, control);
+					if(!packet)
+						return false;
+					installed->sendPanelEvent(packet->row, packet->mask);
+					installed->advance(2048);
+					installed->sendPanelEvent(packet->row, 0);
+					installed->advance(4096);
+					return true;
+				};
+
+				bool machineSelected = ready && audioReady
+					&& tapControl(md::PanelControl::Kit)
+					&& tapControl(md::PanelControl::Down)
+					&& tapControl(md::PanelControl::Enter);
+				for(uint32_t family = 0; family < 7 && machineSelected; ++family)
+					machineSelected = tapControl(md::PanelControl::Down);
+				if(machineSelected)
+				{
+					machineSelected = tapControl(md::PanelControl::Right)
+						&& tapControl(md::PanelControl::Enter)
+						&& tapControl(md::PanelControl::Exit);
+				}
+
 				float peak = 0.0f;
 				bool finiteAudio = true;
 				const auto trigger = md::panelPacket(md::MachineModel::Machinedrum,
 					md::PanelControl::Trigger1);
-				if(ready && trigger)
+				if(machineSelected && trigger)
 				{
-					synthLib::SMidiEvent assign(synthLib::MidiEventSource::Host);
-					assign.sysex =
-						{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x5b,
-						 0x00, 0x00, 0x01, 0xf7};
-					installed->sendMidi(assign);
-					installed->advance(8192);
-
 					std::array<std::vector<float>, 2> rendered{
 						std::vector<float>(8192), std::vector<float>(8192)};
 					synthLib::TAudioOutputs outputs{};
@@ -546,14 +573,17 @@ int main()
 					}
 				}
 
-				functionalSmokePass = ready && lockMode.has_value()
-					&& trigger.has_value() && finiteAudio && peak >= 0.001f;
+				functionalSmokePass = ready && audioReady && lockMode.has_value()
+					&& machineSelected && trigger.has_value()
+					&& finiteAudio && peak >= 0.001f;
 				std::cerr << "[hw-bootstrap] functional-smoke"
 					<< " firmwareReady=" << ready
+					<< " audioReady=" << audioReady
 					<< " statusReply=" << lockMode.has_value();
 				if(lockMode)
 					std::cerr << " lockMode=" << unsigned(*lockMode);
-				std::cerr << " trigger1=" << trigger.has_value()
+				std::cerr << " machineSelected=" << machineSelected
+					<< " trigger1=" << trigger.has_value()
 					<< " audioFinite=" << finiteAudio
 					<< " audioPeak=" << peak
 					<< " PASS=" << functionalSmokePass
