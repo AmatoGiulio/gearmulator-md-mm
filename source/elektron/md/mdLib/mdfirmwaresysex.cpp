@@ -214,10 +214,10 @@ namespace md
 
 			// The updater programs its 1 MiB factory-data bank at 0x100000..0x1fffff.
 			// Do not infer from this placement that it contains all ROM/RAM sample data.
-			constexpr size_t waveformOffset = 0x100000;
+			constexpr size_t factoryDataOffset = 0x100000;
 			if(image.factoryFlashData.size() == 0x100000)
 				std::copy(image.factoryFlashData.begin(), image.factoryFlashData.end(),
-					flash.begin() + waveformOffset);
+					flash.begin() + factoryDataOffset);
 			return flash;
 		}
 	}
