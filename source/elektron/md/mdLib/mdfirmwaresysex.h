@@ -19,10 +19,14 @@ namespace md
 	bool decodeMachinedrumOs163Sysex(FirmwareSysexImage& _out,
 		const std::vector<uint8_t>& _sysex, std::string& _error);
 
-	// Experimental clean-room bootstrap image for the official updater path.
-	// It is deliberately NOT a canonical Elektron ROM: only reset vectors and
-	// the updater-provided factory waveform bank are staged. The decoded MAIN OS
-	// is loaded separately into 0x00200000 before reset.
+	// Build the bootable 8 MiB Machinedrum OS 1.63 flash image from Elektron's
+	// official updater. No external ROM dump is required.
+	bool buildMachinedrumOs163Flash(std::vector<uint8_t>& _out,
+		const FirmwareSysexImage& _image, std::string& _error);
+	bool buildMachinedrumOs163FlashFromSysex(std::vector<uint8_t>& _out,
+		const std::vector<uint8_t>& _sysex, std::string& _error);
+
+	// Internal seed used while reconstructing the persistent bootstrap.
 	std::vector<uint8_t> makeMachinedrumOs163DirectBootFlash(
 		const FirmwareSysexImage& _image);
 }
