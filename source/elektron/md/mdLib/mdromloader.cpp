@@ -1,4 +1,6 @@
 #include "mdromloader.h"
+#include "mdfirmwaresysex.h"
+#include "baseLib/filesystem.h"
 
 namespace md
 {
@@ -10,15 +12,31 @@ namespace md
 	Rom RomLoader::findROM(const MachineModel _model)
 	{
 		const auto files = findFiles(".bin", g_romSize, g_romSize);
-
-		if(files.empty())
-			return {};
-
-		for (const auto& file : files)
+		for(const auto& file : files)
 		{
 			auto rom = Rom(file);
 			if(rom.isValid() && isRomForModel(rom.data(), _model))
 				return rom;
+		}
+
+		// Machinedrum OS 1.63 is also available as Elektron's official updater.
+		// Reconstruct its bootable flash locally instead of requiring a full dump.
+		if(_model == MachineModel::Machinedrum)
+		{
+			constexpr size_t officialSysexSize = 1644582;
+			for(const auto& file : findFiles(".syx", officialSysexSize, officialSysexSize))
+			{
+				std::vector<uint8_t> sysex;
+				if(!baseLib::filesystem::readFile(sysex, file))
+					continue;
+				std::vector<uint8_t> flash;
+				std::string error;
+				if(!buildMachinedrumOs163FlashFromSysex(flash, sysex, error))
+					continue;
+				Rom rom(flash, file);
+				if(rom.isValid() && isRomForModel(rom.data(), _model))
+					return rom;
+			}
 		}
 		return {};
 	}
