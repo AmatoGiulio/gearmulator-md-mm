@@ -9,14 +9,31 @@ namespace md
 		return findROM(MachineModel::Machinedrum);
 	}
 
+	Rom RomLoader::loadFirmware(const std::vector<uint8_t>& data,
+		const std::string& name, const MachineModel model)
+	{
+		if(data.size() == g_romSize && isRomForModel(data, model))
+			return Rom(data, name);
+
+		if(model == MachineModel::Machinedrum)
+		{
+			std::vector<uint8_t> flash;
+			std::string error;
+			if(buildMachinedrumOs163FlashFromSysex(flash, data, error)
+				&& isRomForModel(flash, model))
+				return Rom(flash, name);
+		}
+		return {};
+	}
+
 	Rom RomLoader::findROM(const MachineModel _model)
 	{
-		const auto files = findFiles(".bin", g_romSize, g_romSize);
-		for(const auto& file : files)
+		for(const auto& file : findFiles(".bin", g_romSize, g_romSize))
 		{
-			auto rom = Rom(file);
-			if(rom.isValid() && isRomForModel(rom.data(), _model))
-				return rom;
+			std::vector<uint8_t> data;
+			if(baseLib::filesystem::readFile(data, file))
+				if(auto rom = loadFirmware(data, file, _model); rom.isValid())
+					return rom;
 		}
 
 		// Machinedrum OS 1.63 is also available as Elektron's official updater.
@@ -26,16 +43,10 @@ namespace md
 			constexpr size_t officialSysexSize = 1644582;
 			for(const auto& file : findFiles(".syx", officialSysexSize, officialSysexSize))
 			{
-				std::vector<uint8_t> sysex;
-				if(!baseLib::filesystem::readFile(sysex, file))
-					continue;
-				std::vector<uint8_t> flash;
-				std::string error;
-				if(!buildMachinedrumOs163FlashFromSysex(flash, sysex, error))
-					continue;
-				Rom rom(flash, file);
-				if(rom.isValid() && isRomForModel(rom.data(), _model))
-					return rom;
+				std::vector<uint8_t> data;
+				if(baseLib::filesystem::readFile(data, file))
+					if(auto rom = loadFirmware(data, file, _model); rom.isValid())
+						return rom;
 			}
 		}
 		return {};
