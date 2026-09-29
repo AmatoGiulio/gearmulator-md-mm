@@ -200,9 +200,11 @@ namespace md
 		}
 	}
 
-	std::vector<uint8_t> makeMachinedrumOs163DirectBootFlash(
-		const FirmwareSysexImage& image)
+	namespace
 	{
+		std::vector<uint8_t> makeMachinedrumOs163DirectBootFlash(
+			const FirmwareSysexImage& image)
+		{
 		std::vector<uint8_t> flash(g_romSize, 0xff);
 
 		// ColdFire reset vectors. MAIN OS is linked at 0x00200000 and its first
@@ -213,10 +215,11 @@ namespace md
 		// MAME's documented MD UW flash map places the updater's 1 MiB factory
 		// waveform bank at 0x100000..0x1fffff.
 		constexpr size_t waveformOffset = 0x100000;
-		if(image.factoryWaveforms.size() == 0x100000)
-			std::copy(image.factoryWaveforms.begin(), image.factoryWaveforms.end(),
-				flash.begin() + waveformOffset);
-		return flash;
+			if(image.factoryWaveforms.size() == 0x100000)
+				std::copy(image.factoryWaveforms.begin(), image.factoryWaveforms.end(),
+					flash.begin() + waveformOffset);
+			return flash;
+		}
 	}
 
 	bool buildMachinedrumOs163Flash(std::vector<uint8_t>& out,
