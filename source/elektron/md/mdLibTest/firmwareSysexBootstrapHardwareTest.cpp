@@ -113,10 +113,15 @@ int main()
 		return 2;
 	}
 
+	// Exercise the public firmware-input path with the raw official .syx bytes,
+	// not the already reconstructed flash produced above for the identity check.
 	auto firstBoot = std::make_unique<md::Hardware>(
-		flash, "md-os163-official-syx", md::MachineModel::Machinedrum);
-	if(!firstBoot->isValid())
+		sysex, path, md::MachineModel::Machinedrum);
+	if(!firstBoot->isValid() || firstBoot->flashBaseline() != flash)
+	{
+		std::cerr << "[official-syx] normal Hardware input did not normalize the updater\n";
 		return 3;
+	}
 
 	constexpr uint32_t initializationDeadline = md::g_samplerate * 18;
 	for(uint32_t frames = 0; frames < initializationDeadline
@@ -138,7 +143,7 @@ int main()
 	}
 
 	auto hardware = std::make_unique<md::Hardware>(
-		flash, "md-os163-official-syx", md::MachineModel::Machinedrum,
+		sysex, path, md::MachineModel::Machinedrum,
 		std::vector<uint8_t>{}, std::shared_ptr<md::FrontPanelPublisher>{},
 		initializedFlash, factoryCache);
 	if(!hardware->isValid())
