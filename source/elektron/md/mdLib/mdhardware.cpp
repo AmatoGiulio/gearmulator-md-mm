@@ -44,9 +44,14 @@ namespace md
 	{
 		if(_romData.empty())
 			return RomLoader::findROM(_model);
-		Rom rom(_romData, _romName);
-		if(rom.isValid() && (_allowUpdaterSeed
-			|| RomLoader::isRomForModel(rom.data(), _model)))
+		if(_allowUpdaterSeed)
+		{
+			Rom seed(_romData, _romName);
+			if(seed.isValid())
+				return seed;
+		}
+		if(auto rom = RomLoader::loadFirmware(_romData, _romName, _model);
+			rom.isValid())
 			return rom;
 		return RomLoader::findROM(_model);
 	}
