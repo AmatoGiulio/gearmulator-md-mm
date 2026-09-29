@@ -71,12 +71,8 @@ namespace
 
 		md::Rom rom;
 		if(!_params.romData.empty())
-		{
-			md::Rom supplied(_params.romData, _params.romName);
-			if(supplied.isValid() && md::RomLoader::isRomForModel(
-				supplied.data(), _model))
-				rom = std::move(supplied);
-		}
+			rom = md::RomLoader::loadFirmware(
+				_params.romData, _params.romName, _model);
 		if(!rom.isValid())
 			rom = md::RomLoader::findROM(_model);
 
@@ -109,11 +105,9 @@ namespace
 		const md::MachineModel _model)
 	{
 		if(!_romData.empty())
-		{
-			md::Rom rom(_romData, _romName);
-			if(rom.isValid() && md::RomLoader::isRomForModel(rom.data(), _model))
+			if(auto rom = md::RomLoader::loadFirmware(_romData, _romName, _model);
+				rom.isValid())
 				return rom;
-		}
 		return md::RomLoader::findROM(_model);
 	}
 }
