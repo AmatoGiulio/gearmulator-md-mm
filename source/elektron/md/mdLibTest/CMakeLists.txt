@@ -311,9 +311,9 @@ if(BUILD_TESTING)
 	set_property(TEST mdLibTests mdAudioQueueTest APPEND PROPERTY FIXTURES_REQUIRED MdSysexTransport)
 endif()
 
-add_executable(mdFirmwareSysexBootstrapHardwareTest firmwareSysexBootstrapHardwareTest.cpp)
-target_link_libraries(mdFirmwareSysexBootstrapHardwareTest PRIVATE mdLib)
-add_test(NAME mdFirmwareSysexBootstrapHardwareTest COMMAND mdFirmwareSysexBootstrapHardwareTest)
-set_tests_properties(mdFirmwareSysexBootstrapHardwareTest PROPERTIES
+add_executable(mdOfficialSysexFirmwareTest officialSysexFirmwareTest.cpp)
+target_link_libraries(mdOfficialSysexFirmwareTest PRIVATE mdLib)
+add_test(NAME mdOfficialSysexFirmwareTest COMMAND mdOfficialSysexFirmwareTest)
+set_tests_properties(mdOfficialSysexFirmwareTest PROPERTIES
 	LABELS "Integration;FirmwareTest;Boot;AudioIo" SKIP_RETURN_CODE 77 TIMEOUT 180)
-set_property(TARGET mdFirmwareSysexBootstrapHardwareTest PROPERTY FOLDER "Elektron/test")
+set_property(TARGET mdOfficialSysexFirmwareTest PROPERTY FOLDER "Elektron/test")
