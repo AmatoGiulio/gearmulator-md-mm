@@ -74,9 +74,9 @@ namespace md
 		uint32_t getResetPC() override;
 		uint32_t getResetSP() override;
 
-		// Stage a decoded RAM-linked MAIN OS before reset. This is used only by
-		// the official-updater direct-boot path; normal canonical-ROM boot is unchanged.
-		bool stageDirectBootMainOs(const std::vector<uint8_t>& _mainOs);
+		// Internal helper for reconstructing the persistent bootstrap from Elektron's
+		// official updater. Normal firmware boot never stages MAIN OS directly.
+		bool stageOfficialUpdaterMainOs(const std::vector<uint8_t>& _mainOs);
 
 		// ColdFire-facing HI08 register files for the two DSPs. The Hardware owns the
 		// md::Dsp wrappers and registers their boot/bridge callbacks on these; the
@@ -155,17 +155,7 @@ namespace md
 		{
 			m_midiTransmitTap = std::move(_tap);
 		}
-		void setPanelTransmitTap(std::function<void(uint8_t)> _tap)
-		{
-			m_panelTransmitTap = std::move(_tap);
-		}
 		std::vector<uint8_t> copyPatchRam() const;
-		std::vector<uint8_t> copyMainRam() const;
-		bool replaceMainRam(const std::vector<uint8_t>& _data);
-		std::vector<uint8_t> copyLoaderRam() const;
-		bool replaceLoaderRam(const std::vector<uint8_t>& _data);
-		std::vector<uint8_t> copyInternalSram() const;
-		bool replaceInternalSram(const std::vector<uint8_t>& _data);
 		bool replacePatchRam(const std::vector<uint8_t>& _data);
 		std::vector<uint8_t> copyFlashData() const;
 		std::vector<uint8_t> copyUserFlash() const;
@@ -246,7 +236,6 @@ namespace md
 		bool m_midiTxDiscontinuity = false;
 		std::atomic<uint64_t> m_midiTxOverflow{0};
 		std::function<void(uint8_t)> m_midiTransmitTap;
-		std::function<void(uint8_t)> m_panelTransmitTap;
 		synthLib::MidiBufferParser m_midiTxParser{synthLib::MidiEventSource::Device};
 
 		// ColdFire-facing HI08 register files for the two DSP host-port windows. The
