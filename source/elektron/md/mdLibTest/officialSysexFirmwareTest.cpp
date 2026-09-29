@@ -90,6 +90,7 @@ namespace
 
 int main()
 {
+	std::cerr << "[official-syx] start" << std::endl;
 	const auto* path = std::getenv("GEARMULATOR_MD_FIRMWARE_SYX");
 	if(!path || !*path)
 	{
@@ -99,7 +100,13 @@ int main()
 	}
 
 	std::ifstream input(path, std::ios::binary);
+	if(!input)
+	{
+		std::cerr << "[official-syx] could not open " << path << std::endl;
+		return 1;
+	}
 	const std::vector<uint8_t> sysex{std::istreambuf_iterator<char>(input), {}};
+	std::cerr << "[official-syx] inputBytes=" << sysex.size() << std::endl;
 	std::vector<uint8_t> flash;
 	std::string error;
 	if(!md::buildMachinedrumOs163FlashFromSysex(flash, sysex, error))
@@ -107,6 +114,7 @@ int main()
 		std::cerr << "[official-syx] reconstruction failed: " << error << '\n';
 		return 1;
 	}
+	std::cerr << "[official-syx] reconstructedBytes=" << flash.size() << std::endl;
 	if(!md::RomLoader::isRomForModel(flash, md::MachineModel::Machinedrum))
 	{
 		std::cerr << "[official-syx] reconstructed image was not accepted as MD OS 1.63\n";
@@ -134,6 +142,7 @@ int main()
 		return 4;
 	}
 
+	std::cerr << "[official-syx] first-run initialization complete" << std::endl;
 	const auto initializedFlash = firstBoot->copyFlashData();
 	std::vector<uint8_t> factoryCache;
 	if(!md::encodeFactoryFlashCache(factoryCache, initializedFlash, flash))
@@ -149,6 +158,7 @@ int main()
 	if(!hardware->isValid())
 		return 6;
 
+	std::cerr << "[official-syx] cold reboot constructed; advancing runtime" << std::endl;
 	advance(*hardware, md::g_samplerate * 20);
 	const bool firmwareReady = hardware->isFirmwareMidiReady();
 	const bool audioReady = hardware->isAudioReady();
