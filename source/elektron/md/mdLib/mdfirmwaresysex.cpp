@@ -205,18 +205,18 @@ namespace md
 		std::vector<uint8_t> makeMachinedrumOs163DirectBootFlash(
 			const FirmwareSysexImage& image)
 		{
-		std::vector<uint8_t> flash(g_romSize, 0xff);
+			std::vector<uint8_t> flash(g_romSize, 0xff);
 
-		// ColdFire reset vectors. MAIN OS is linked at 0x00200000 and its first
-		// instruction establishes A7=0x00300000 itself as well.
-		flash[0] = 0x00; flash[1] = 0x30; flash[2] = 0x00; flash[3] = 0x00;
-		flash[4] = 0x00; flash[5] = 0x20; flash[6] = 0x00; flash[7] = 0x00;
+			// ColdFire reset vectors. MAIN OS is linked at 0x00200000 and its first
+			// instruction establishes A7=0x00300000 itself as well.
+			flash[0] = 0x00; flash[1] = 0x30; flash[2] = 0x00; flash[3] = 0x00;
+			flash[4] = 0x00; flash[5] = 0x20; flash[6] = 0x00; flash[7] = 0x00;
 
-		// MAME's documented MD UW flash map places the updater's 1 MiB factory
-		// waveform bank at 0x100000..0x1fffff.
-		constexpr size_t waveformOffset = 0x100000;
-			if(image.factoryWaveforms.size() == 0x100000)
-				std::copy(image.factoryWaveforms.begin(), image.factoryWaveforms.end(),
+			// The updater programs its 1 MiB factory-data bank at 0x100000..0x1fffff.
+			// Do not infer from this placement that it contains all ROM/RAM sample data.
+			constexpr size_t waveformOffset = 0x100000;
+			if(image.factoryFlashData.size() == 0x100000)
+				std::copy(image.factoryFlashData.begin(), image.factoryFlashData.end(),
 					flash.begin() + waveformOffset);
 			return flash;
 		}
@@ -229,7 +229,7 @@ namespace md
 		error.clear();
 		if(image.version != "1.63" || image.mainOs.empty()
 			|| image.decodedTransport.size() != 939744
-			|| image.factoryWaveforms.size() != 0x100000)
+			|| image.factoryFlashData.size() != 0x100000)
 		{
 			error = "incomplete Machinedrum OS 1.63 updater image";
 			return false;
@@ -398,10 +398,10 @@ namespace md
 		out.mainOs = std::move(sections[0].data);
 		out.dsp1 = std::move(sections[1].data);
 		out.dsp2 = std::move(sections[2].data);
-		out.factoryWaveforms.reserve(1024 * 1024);
-		out.factoryWaveforms.insert(out.factoryWaveforms.end(),
+		out.factoryFlashData.reserve(1024 * 1024);
+		out.factoryFlashData.insert(out.factoryFlashData.end(),
 			sections[3].data.begin(), sections[3].data.end());
-		out.factoryWaveforms.insert(out.factoryWaveforms.end(),
+		out.factoryFlashData.insert(out.factoryFlashData.end(),
 			sections[4].data.begin(), sections[4].data.end());
 		return true;
 	}
