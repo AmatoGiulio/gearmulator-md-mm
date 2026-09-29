@@ -8,9 +8,10 @@ There is a Discord channel [here](https://discord.gg/BnkTKpmp8) at #gearmulator-
 **DO NOT ask us for the .bin files / firmware! They're under Elektron's copyright. This emulator is for people who own the original hardware.**
 
 For Machinedrum OS 1.63, Gearmulator MD can also consume Elektron's official
-`Elektron_SPS1-1UW_OS1.63.syx` updater directly. The 8 MiB boot image is
-reconstructed locally at load time; no full flash dump is bundled or required
-for the core OS path. Existing supported `.bin` images remain accepted.
+`Elektron_SPS1-1UW_OS1.63.syx` updater directly. Place it in the firmware
+`roms` folder opened by Gearmulator when firmware is missing. The 8 MiB boot
+image is reconstructed locally at load time; no full flash dump is bundled or
+required for the core OS path. Existing supported `.bin` images remain accepted.
 
 ROM/RAM user-sample content is separate from the core OS updater path and is
 tracked independently; do not assume an OS update file contains a device's
