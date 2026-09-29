@@ -138,13 +138,14 @@ namespace md
 			m_patchRam = _initialPatchRam;
 	}
 
-	bool Microcontroller::stageDirectBootMainOs(const std::vector<uint8_t>& mainOs)
+	bool Microcontroller::stageOfficialUpdaterMainOs(
+		const std::vector<uint8_t>& _mainOs)
 	{
-		if(m_model != MachineModel::Machinedrum || mainOs.empty()
-			|| mainOs.size() > m_mainRam.size())
+		if(m_model != MachineModel::Machinedrum || _mainOs.empty()
+			|| _mainOs.size() > m_mainRam.size())
 			return false;
 		std::fill(m_mainRam.begin(), m_mainRam.end(), 0);
-		std::copy(mainOs.begin(), mainOs.end(), m_mainRam.begin());
+		std::copy(_mainOs.begin(), _mainOs.end(), m_mainRam.begin());
 		m_immPageAddress = 0xffffffffu;
 		m_immPageData = nullptr;
 		return true;
@@ -154,51 +155,6 @@ namespace md
 	{
 		std::shared_lock lock(m_patchRamMutex);
 		return m_patchRam;
-	}
-
-	std::vector<uint8_t> Microcontroller::copyMainRam() const
-	{
-		return m_mainRam;
-	}
-
-	bool Microcontroller::replaceMainRam(const std::vector<uint8_t>& _data)
-	{
-		if(_data.size() != m_mainRam.size())
-			return false;
-		m_mainRam = _data;
-		m_immPageAddress = 0xffffffffu;
-		m_immPageData = nullptr;
-		return true;
-	}
-
-	std::vector<uint8_t> Microcontroller::copyLoaderRam() const
-	{
-		return m_loaderRam;
-	}
-
-	bool Microcontroller::replaceLoaderRam(const std::vector<uint8_t>& _data)
-	{
-		if(_data.size() != m_loaderRam.size())
-			return false;
-		m_loaderRam = _data;
-		m_immPageAddress = 0xffffffffu;
-		m_immPageData = nullptr;
-		return true;
-	}
-
-	std::vector<uint8_t> Microcontroller::copyInternalSram() const
-	{
-		return m_internalSram;
-	}
-
-	bool Microcontroller::replaceInternalSram(const std::vector<uint8_t>& _data)
-	{
-		if(_data.size() != m_internalSram.size())
-			return false;
-		m_internalSram = _data;
-		m_immPageAddress = 0xffffffffu;
-		m_immPageData = nullptr;
-		return true;
 	}
 
 	bool Microcontroller::replacePatchRam(const std::vector<uint8_t>& _data)
@@ -395,8 +351,6 @@ namespace md
 
 	void Microcontroller::onPanelTransmit(const uint8_t _byte)
 	{
-		if(m_panelTransmitTap)
-			m_panelTransmitTap(_byte);
 		// Minimal Monomachine panel handshake. Firmware disassembly establishes
 		// the 0xcc autobaud response; 0x23,0x01 is the compatible descriptor used
 		// by the earlier private bring-up implementation.
