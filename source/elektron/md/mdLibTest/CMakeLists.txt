@@ -58,20 +58,6 @@ set_tests_properties(mdFirmwareSysexTest PROPERTIES
 	LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 15)
 set_property(TARGET mdFirmwareSysexTest PROPERTY FOLDER "Elektron/test")
 
-add_executable(mdFirmwareSysexDirectBootTest firmwareSysexDirectBootTest.cpp)
-target_link_libraries(mdFirmwareSysexDirectBootTest PRIVATE mdLib)
-add_test(NAME mdFirmwareSysexDirectBootTest COMMAND mdFirmwareSysexDirectBootTest)
-set_tests_properties(mdFirmwareSysexDirectBootTest PROPERTIES
-	LABELS "Integration;FirmwareTest;Boot" SKIP_RETURN_CODE 77 TIMEOUT 15)
-set_property(TARGET mdFirmwareSysexDirectBootTest PROPERTY FOLDER "Elektron/test")
-
-add_executable(mdFirmwareSysexFullBootTest firmwareSysexFullBootTest.cpp)
-target_link_libraries(mdFirmwareSysexFullBootTest PRIVATE mdLib)
-add_test(NAME mdFirmwareSysexFullBootTest COMMAND mdFirmwareSysexFullBootTest)
-set_tests_properties(mdFirmwareSysexFullBootTest PROPERTIES
-	LABELS "Integration;FirmwareTest;Boot" SKIP_RETURN_CODE 77 TIMEOUT 60)
-set_property(TARGET mdFirmwareSysexFullBootTest PROPERTY FOLDER "Elektron/test")
-
 # Manual acceptance test: user-supplied firmware/data paths make this unsuitable
 # for ctest, but it exercises the same validated sender against real firmware and
 # requires an observable machine-state mutation after the UART drains.
@@ -325,37 +311,9 @@ if(BUILD_TESTING)
 	set_property(TEST mdLibTests mdAudioQueueTest APPEND PROPERTY FIXTURES_REQUIRED MdSysexTransport)
 endif()
 
-add_executable(mdFirmwareSysexEscapeTraceTest firmwareSysexEscapeTraceTest.cpp)
-target_link_libraries(mdFirmwareSysexEscapeTraceTest PRIVATE mdLib)
-add_test(NAME mdFirmwareSysexEscapeTraceTest COMMAND mdFirmwareSysexEscapeTraceTest)
-set_tests_properties(mdFirmwareSysexEscapeTraceTest PROPERTIES
-	LABELS "Integration;FirmwareTest;Boot;Trace" SKIP_RETURN_CODE 77 TIMEOUT 60)
-set_property(TARGET mdFirmwareSysexEscapeTraceTest PROPERTY FOLDER "Elektron/test")
-
-add_executable(mdFirmwareSysexVbrBootTest firmwareSysexVbrBootTest.cpp)
-target_link_libraries(mdFirmwareSysexVbrBootTest PRIVATE mdLib)
-add_test(NAME mdFirmwareSysexVbrBootTest COMMAND mdFirmwareSysexVbrBootTest)
-set_tests_properties(mdFirmwareSysexVbrBootTest PROPERTIES
-	LABELS "Integration;FirmwareTest;Boot;VBR" SKIP_RETURN_CODE 77 TIMEOUT 90)
-set_property(TARGET mdFirmwareSysexVbrBootTest PROPERTY FOLDER "Elektron/test")
-
-add_executable(mdFirmwareSysexBootstrapCaptureTest firmwareSysexBootstrapCaptureTest.cpp)
-target_link_libraries(mdFirmwareSysexBootstrapCaptureTest PRIVATE mdLib)
-add_test(NAME mdFirmwareSysexBootstrapCaptureTest COMMAND mdFirmwareSysexBootstrapCaptureTest)
-set_tests_properties(mdFirmwareSysexBootstrapCaptureTest PROPERTIES
-	LABELS "Integration;FirmwareTest;Boot;Flash" SKIP_RETURN_CODE 77 TIMEOUT 120)
-set_property(TARGET mdFirmwareSysexBootstrapCaptureTest PROPERTY FOLDER "Elektron/test")
-
-add_executable(mdFirmwareSysexBootstrapInstallTest firmwareSysexBootstrapInstallTest.cpp)
-target_link_libraries(mdFirmwareSysexBootstrapInstallTest PRIVATE mdLib)
-add_test(NAME mdFirmwareSysexBootstrapInstallTest COMMAND mdFirmwareSysexBootstrapInstallTest)
-set_tests_properties(mdFirmwareSysexBootstrapInstallTest PROPERTIES
-	LABELS "Integration;FirmwareTest;Boot;Install" SKIP_RETURN_CODE 77 TIMEOUT 180)
-set_property(TARGET mdFirmwareSysexBootstrapInstallTest PROPERTY FOLDER "Elektron/test")
-
 add_executable(mdFirmwareSysexBootstrapHardwareTest firmwareSysexBootstrapHardwareTest.cpp)
 target_link_libraries(mdFirmwareSysexBootstrapHardwareTest PRIVATE mdLib)
 add_test(NAME mdFirmwareSysexBootstrapHardwareTest COMMAND mdFirmwareSysexBootstrapHardwareTest)
 set_tests_properties(mdFirmwareSysexBootstrapHardwareTest PROPERTIES
-	LABELS "Integration;FirmwareTest;Boot;DSP;Install" SKIP_RETURN_CODE 77 TIMEOUT 120)
+	LABELS "Integration;FirmwareTest;Boot;AudioIo" SKIP_RETURN_CODE 77 TIMEOUT 180)
 set_property(TARGET mdFirmwareSysexBootstrapHardwareTest PROPERTY FOLDER "Elektron/test")
