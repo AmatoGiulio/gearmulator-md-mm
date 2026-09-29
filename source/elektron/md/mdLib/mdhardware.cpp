@@ -40,12 +40,12 @@ namespace md
 	constexpr uint64_t g_dsp1CyclesPerEsaiFrame  = 2304;
 
 	Rom initRom(const std::vector<uint8_t>& _romData, const std::string& _romName,
-		const MachineModel _model, const bool _allowDirectBootImage = false)
+		const MachineModel _model, const bool _allowUpdaterSeed = false)
 	{
 		if(_romData.empty())
 			return RomLoader::findROM(_model);
 		Rom rom(_romData, _romName);
-		if(rom.isValid() && (_allowDirectBootImage
+		if(rom.isValid() && (_allowUpdaterSeed
 			|| RomLoader::isRomForModel(rom.data(), _model)))
 			return rom;
 		return RomLoader::findROM(_model);
@@ -79,7 +79,7 @@ namespace md
 		const FlashSectorOverlay& _pendingFlashOverlay)
 		: Hardware(_romData, _romName, _model, _initialPatchRam,
 			std::move(_frontPanelPublisher), _initialFlash, _factoryFlashCache,
-			_pendingFlashOverlay, {})
+			_pendingFlashOverlay, {}, {})
 	{
 	}
 
@@ -90,13 +90,11 @@ namespace md
 		const std::vector<uint8_t>& _factoryFlashCache,
 		const FlashSectorOverlay& _pendingFlashOverlay,
 		const std::vector<uint8_t>& _initialUserFlash,
-		const std::vector<uint8_t>& _directBootMainOs)
+		const std::vector<uint8_t>& _officialUpdaterMainOs)
 		: m_model(_model)
 		, m_rom(initRom(_romData, _romName, _model,
-			_model == MachineModel::Machinedrum && !_directBootMainOs.empty()))
-		, m_firmwareFingerprint(_model == MachineModel::Machinedrum
-			&& !_directBootMainOs.empty()
-			? g_mdOs163Fingerprint : fingerprintRom(m_rom.data()))
+			_model == MachineModel::Machinedrum && !_officialUpdaterMainOs.empty()))
+		, m_firmwareFingerprint(fingerprintRom(m_rom.data()))
 		, m_factoryFlashInitializationExpected(_model == MachineModel::Machinedrum
 			&& _initialFlash.empty() && _factoryFlashCache.empty())
 		, m_uc(m_rom, m_model,
@@ -583,12 +581,10 @@ namespace md
 			score.maximumRingDepth = score.currentRingDepth;
 		});
 
-		// The official-updater path supplies the RAM-linked MAIN OS directly.
-		// Canonical ROM boot leaves this empty and follows the original path.
-		if(!_directBootMainOs.empty()
-			&& !m_uc.stageDirectBootMainOs(_directBootMainOs))
+		if(!_officialUpdaterMainOs.empty()
+			&& !m_uc.stageOfficialUpdaterMainOs(_officialUpdaterMainOs))
 		{
-			std::fprintf(stderr, "[MD] failed to stage direct-boot MAIN OS\n");
+			std::fprintf(stderr, "[MD] failed to stage official updater MAIN OS\n");
 			return;
 		}
 
@@ -618,27 +614,6 @@ namespace md
 	Hardware::~Hardware()
 	{
 		m_uc.setMidiTransmitTap({});
-	}
-
-	void Hardware::prepareDspsForBootstrapReload(const bool _holdAfterBoot)
-	{
-		// A DSP that is between hardware reset and boot completion must be parked.
-		// The normal scheduler latches an origin the first time booted() becomes true.
-		// Clear the old origins before resetting the DSPs; otherwise schedStep() still
-		// considers them runnable and executes PC=0 against stale/partial P memory.
-		for(size_t i = 0; i < 2; ++i)
-		{
-			m_schedDspOriginLatched[i] = false;
-			m_schedDspOriginFrame[i] = 0.0;
-			m_schedDspOriginCycles[i] = 0;
-			m_schedDspOriginUcCycles[i] = 0;
-			m_mmBpSinceUcCycles[i] = 0;
-		}
-		m_schedInLinkDelivery = false;
-
-		m_dspMixer.prepareForBootstrapReload(_holdAfterBoot);
-		m_dspProducer.prepareForBootstrapReload(_holdAfterBoot);
-		notifyHostPumpStateChanged();
 	}
 
 	bool Hardware::isValid() const
