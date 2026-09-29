@@ -66,7 +66,7 @@ namespace md
 			const std::vector<uint8_t>& _factoryFlashCache,
 			const FlashSectorOverlay& _pendingFlashOverlay,
 			const std::vector<uint8_t>& _initialUserFlash,
-			const std::vector<uint8_t>& _directBootMainOs = {});
+			const std::vector<uint8_t>& _officialUpdaterMainOs);
 		~Hardware();
 
 		bool isValid() const;
@@ -124,7 +124,6 @@ namespace md
 
 		Microcontroller& getUC() { return m_uc; }
 		std::vector<uint8_t> copyPatchRam() const;
-		std::vector<uint8_t> copyMainRam() const { return m_uc.copyMainRam(); }
 		std::vector<uint8_t> copyFlashData() const { return m_uc.copyFlashData(); }
 		std::vector<uint8_t> copyUserFlash() const { return m_uc.copyUserFlash(); }
 		const std::vector<uint8_t>& flashBaseline() const { return m_rom.data(); }
@@ -171,7 +170,6 @@ namespace md
 		// Role accessors used by the HI08 bridge and scheduler.
 		Dsp& getDspProducer() { return m_dspProducer; }	// DSP2, index 1
 		Dsp& getDspMixer()    { return m_dspMixer; }	// DSP1, index 0 (main/output)
-		void prepareDspsForBootstrapReload(bool _holdAfterBoot = false);
 
 		void processUC();
 		void processAudio(uint32_t _frames, uint32_t _latency);
