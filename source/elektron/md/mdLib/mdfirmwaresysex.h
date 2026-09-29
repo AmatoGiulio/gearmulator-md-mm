@@ -26,7 +26,4 @@ namespace md
 	bool buildMachinedrumOs163FlashFromSysex(std::vector<uint8_t>& _out,
 		const std::vector<uint8_t>& _sysex, std::string& _error);
 
-	// Internal seed used while reconstructing the persistent bootstrap.
-	std::vector<uint8_t> makeMachinedrumOs163DirectBootFlash(
-		const FirmwareSysexImage& _image);
 }
