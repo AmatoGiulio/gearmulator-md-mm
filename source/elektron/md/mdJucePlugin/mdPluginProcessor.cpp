@@ -831,12 +831,16 @@ namespace mdJucePlugin
 		params.homePath = m_deviceHomePath ? *m_deviceHomePath : getDataFolder();
 		auto d = std::make_unique<md::Device>(params, m_initialPatchRam);
 		if(!d->isValid())
+		{
+			const auto requirement = m_model == md::MachineModel::Machinedrum
+				? "Elektron's official Machinedrum OS 1.63 updater (.syx), or a supported 8 MB firmware image (.bin), is required but was not found.\n\n"
+				: "A Gearmulator MM firmware ROM (8 MB .bin) is required, but was not found.\n\n";
 			throw synthLib::DeviceException(synthLib::DeviceError::FirmwareMissing,
-				std::string("A ") + productName(m_model) +
-				" firmware rom (8 MB .bin) is required, but was not found.\n\n"
-				"Do NOT discuss firmware or ROMs in Discord. "
-				"Do not request or share files or download links, "
-				"or ask for help obtaining or installing firmware.");
+				requirement +
+				std::string("Do NOT discuss firmware or ROMs in Discord. ")
+				+ "Do not request or share copyrighted firmware files, "
+				+ "or ask for help obtaining unauthorized copies.");
+		}
 		d->setRamRecordingMode(getRamRecordingMode());
 		return d.release();
 	}
