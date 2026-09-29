@@ -25,7 +25,7 @@ int main()
 	}
 	if(image.version != "1.63" || image.mainOs.size() != 404766
 		|| image.dsp1.size() != 750369 || image.dsp2.size() != 56469
-		|| image.factoryWaveforms.size() != 1024 * 1024)
+		|| image.factoryFlashData.size() != 1024 * 1024)
 	{
 		std::cerr << "decoded firmware topology is unexpected\n";
 		return 1;
