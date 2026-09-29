@@ -74,10 +74,6 @@ namespace md
 		uint32_t getResetPC() override;
 		uint32_t getResetSP() override;
 
-		// Internal helper for reconstructing the persistent bootstrap from Elektron's
-		// official updater. Normal firmware boot never stages MAIN OS directly.
-		bool stageOfficialUpdaterMainOs(const std::vector<uint8_t>& _mainOs);
-
 		// ColdFire-facing HI08 register files for the two DSPs. The Hardware owns the
 		// md::Dsp wrappers and registers their boot/bridge callbacks on these; the
 		// Microcontroller just maps them into the address space (0x500000 / 0x600000).
@@ -184,6 +180,10 @@ namespace md
 
 	private:
 		friend class Hardware;
+
+		// Used only by Hardware while reconstructing the persistent bootstrap from
+		// Elektron's official updater. Normal firmware boot never stages MAIN OS.
+		bool stageOfficialUpdaterMainOs(const std::vector<uint8_t>& _mainOs);
 		friend struct IdleSelfBranchTestAccess;
 		// Exchange complete flash backing stores between two stopped scheduler
 		// owners. Device uses this during a patch-only cold reboot so the final
