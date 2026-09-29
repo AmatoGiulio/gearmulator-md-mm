@@ -93,7 +93,7 @@ int main()
 	const auto* path = std::getenv("GEARMULATOR_MD_FIRMWARE_SYX");
 	if(!path || !*path)
 	{
-		std::cout << "mdFirmwareSysexBootstrapHardwareTest: SKIP "
+		std::cout << "mdOfficialSysexFirmwareTest: SKIP "
 			"(GEARMULATOR_MD_FIRMWARE_SYX not supplied)\n";
 		return 77;
 	}
