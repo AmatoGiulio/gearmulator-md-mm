@@ -1,6 +1,9 @@
 #include "mdfirmwaresysex.h"
 
 #include "mdtypes.h"
+#include "mdhardware.h"
+#include "mdmemorymap.h"
+#include "mc68k/cpuState.h"
 
 #include <algorithm>
 #include <array>
@@ -214,6 +217,84 @@ namespace md
 			std::copy(image.factoryWaveforms.begin(), image.factoryWaveforms.end(),
 				flash.begin() + waveformOffset);
 		return flash;
+	}
+
+	bool buildMachinedrumOs163Flash(std::vector<uint8_t>& out,
+		const FirmwareSysexImage& image, std::string& error)
+	{
+		out.clear();
+		error.clear();
+		if(image.version != "1.63" || image.mainOs.empty()
+			|| image.decodedTransport.size() != 939744
+			|| image.factoryWaveforms.size() != 0x100000)
+		{
+			error = "incomplete Machinedrum OS 1.63 updater image";
+			return false;
+		}
+
+		auto seed = makeMachinedrumOs163DirectBootFlash(image);
+		Hardware installer(seed, "md-os163-official-syx-bootstrap",
+			MachineModel::Machinedrum, std::vector<uint8_t>{},
+			std::shared_ptr<FrontPanelPublisher>{}, std::vector<uint8_t>{},
+			std::vector<uint8_t>{}, FlashSectorOverlay{}, std::vector<uint8_t>{},
+			image.mainOs);
+		if(!installer.isValid())
+		{
+			error = "could not start Machinedrum OS 1.63 updater bootstrap";
+			return false;
+		}
+
+		auto& uc = installer.getUC();
+		uc.getCpuState()->vbr = memorymap::g_internalSram.begin;
+		constexpr uint64_t quietCycles = g_ucClockHz / 10; // 100 ms after last flash write
+		constexpr uint32_t maxFrames = g_samplerate * 2;
+		for(uint32_t frames = 0; frames < maxFrames
+			&& (!uc.flashDirty() || uc.flashIdleCycles() < quietCycles); frames += 128)
+			installer.advance(std::min<uint32_t>(128, maxFrames - frames));
+
+		if(!uc.flashDirty() || uc.flashIdleCycles() < quietCycles)
+		{
+			error = "Machinedrum updater did not finish reconstructing its bootstrap";
+			return false;
+		}
+
+		out = uc.copyFlashData();
+		constexpr size_t transportOffset = 0x4000;
+		if(out.size() != g_romSize
+			|| transportOffset + image.decodedTransport.size() > out.size())
+		{
+			error = "invalid reconstructed Machinedrum flash layout";
+			out.clear();
+			return false;
+		}
+		std::copy(image.decodedTransport.begin(), image.decodedTransport.end(),
+			out.begin() + transportOffset);
+
+		uint64_t fingerprint = 14695981039346656037ull;
+		for(const auto byte : out)
+		{
+			fingerprint ^= byte;
+			fingerprint *= 1099511628211ull;
+		}
+		if(fingerprint != g_mdOs163OfficialSyxFingerprint)
+		{
+			error = "reconstructed Machinedrum OS 1.63 flash failed identity check";
+			out.clear();
+			return false;
+		}
+		return true;
+	}
+
+	bool buildMachinedrumOs163FlashFromSysex(std::vector<uint8_t>& out,
+		const std::vector<uint8_t>& sysex, std::string& error)
+	{
+		FirmwareSysexImage image;
+		if(!decodeMachinedrumOs163Sysex(image, sysex, error))
+		{
+			out.clear();
+			return false;
+		}
+		return buildMachinedrumOs163Flash(out, image, error);
 	}
 
 	bool decodeMachinedrumOs163Sysex(FirmwareSysexImage& out,
