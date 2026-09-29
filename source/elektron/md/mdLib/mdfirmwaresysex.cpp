@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <memory>
 
 namespace md
 {
@@ -236,24 +237,27 @@ namespace md
 		}
 
 		auto seed = makeMachinedrumOs163DirectBootFlash(image);
-		Hardware installer(seed, "md-os163-official-syx-bootstrap",
+		// Hardware is intentionally heap-allocated. It owns large DSP/audio scheduler
+		// state and exceeds the default Windows thread stack when created as a local.
+		auto installer = std::make_unique<Hardware>(
+			seed, "md-os163-official-syx-bootstrap",
 			MachineModel::Machinedrum, std::vector<uint8_t>{},
 			std::shared_ptr<FrontPanelPublisher>{}, std::vector<uint8_t>{},
 			std::vector<uint8_t>{}, FlashSectorOverlay{}, std::vector<uint8_t>{},
 			image.mainOs);
-		if(!installer.isValid())
+		if(!installer->isValid())
 		{
 			error = "could not start Machinedrum OS 1.63 updater bootstrap";
 			return false;
 		}
 
-		auto& uc = installer.getUC();
+		auto& uc = installer->getUC();
 		uc.getCpuState()->vbr = memorymap::g_internalSram.begin;
 		constexpr uint64_t quietCycles = g_ucClockHz / 10; // 100 ms after last flash write
 		constexpr uint32_t maxFrames = g_samplerate * 2;
 		for(uint32_t frames = 0; frames < maxFrames
 			&& (!uc.flashDirty() || uc.flashIdleCycles() < quietCycles); frames += 128)
-			installer.advance(std::min<uint32_t>(128, maxFrames - frames));
+			installer->advance(std::min<uint32_t>(128, maxFrames - frames));
 
 		if(!uc.flashDirty() || uc.flashIdleCycles() < quietCycles)
 		{
