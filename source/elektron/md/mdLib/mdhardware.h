@@ -66,7 +66,7 @@ namespace md
 			const std::vector<uint8_t>& _factoryFlashCache,
 			const FlashSectorOverlay& _pendingFlashOverlay,
 			const std::vector<uint8_t>& _initialUserFlash,
-			const std::vector<uint8_t>& _officialUpdaterMainOs);
+			const std::vector<uint8_t>& _officialUpdaterMainOs = {});
 		~Hardware();
 
 		bool isValid() const;
