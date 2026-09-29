@@ -13,7 +13,7 @@ namespace md
 		std::vector<uint8_t> mainOs;
 		std::vector<uint8_t> dsp1;
 		std::vector<uint8_t> dsp2;
-		std::vector<uint8_t> factoryWaveforms;
+		std::vector<uint8_t> factoryFlashData;
 	};
 
 	bool decodeMachinedrumOs163Sysex(FirmwareSysexImage& _out,
