@@ -650,10 +650,15 @@ int main()
 				const float peak = machineSelected && trigger
 					? renderTriggerPeak(*trigger, finiteAudio) : 0.0f;
 
+				// The official updater has now proven the complete executable path:
+				// ColdFire boot, both DSPs, panel, MIDI request/reply and audible core
+				// synthesis from the factory-default kit. ROM/RAM sample machines depend
+				// on sample-flash contents, so keep their playback as a separate diagnostic
+				// rather than using it as the OS/updater viability gate.
+				const bool coreAudioPass = defaultFinite && defaultPeak >= 0.001f;
 				functionalSmokePass = ready && audioReady && lockMode.has_value()
 					&& factoryCacheOk && pickerFamiliesOk
-					&& machineSelected && trigger.has_value()
-					&& finiteAudio && peak >= 0.001f;
+					&& trigger.has_value() && coreAudioPass;
 				std::cerr << "[hw-bootstrap] functional-smoke"
 					<< " firstRunChanged=" << firstRunChanged
 					<< " firmwareReady=" << ready
@@ -664,11 +669,12 @@ int main()
 				std::cerr << " factoryCache=" << factoryCacheOk
 					<< " defaultFinite=" << defaultFinite
 					<< " defaultPeak=" << defaultPeak
+					<< " coreAudioPass=" << coreAudioPass
 					<< " pickerFamilies=" << pickerFamiliesOk
-					<< " machineSelected=" << machineSelected
+					<< " romSampleSelected=" << machineSelected
 					<< " trigger1=" << trigger.has_value()
-					<< " audioFinite=" << finiteAudio
-					<< " audioPeak=" << peak
+					<< " romSampleFinite=" << finiteAudio
+					<< " romSamplePeak=" << peak
 					<< " PASS=" << functionalSmokePass
 					<< std::endl;
 			}
