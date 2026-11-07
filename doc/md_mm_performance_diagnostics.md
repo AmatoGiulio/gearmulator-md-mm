@@ -76,8 +76,17 @@ Timings are **inclusive**: synth time includes its lock wait and resampler work;
 resampler time includes device processing; device time includes deferred-machine
 advancement. Do not add these totals together. Resampler minus device time is an
 approximation of resampling/dispatch overhead. JIT counts measure code-generation
-entries; this feature does not measure compilation duration or split device cost
-into MCU/DSP/peripheral phases. Those remain targeted profiling follow-ups.
+entries and not compilation duration.
+
+MD/MM additionally report four **exclusive** emulator phase timings:
+`emulatorSchedulerNanoseconds`, `emulatorUcNanoseconds`,
+`emulatorDsp1Nanoseconds`, and `emulatorDsp2Nanoseconds`. Nested processor
+catch-up pauses the parent phase before the child is measured, so these four
+values can be added without double-counting. Scheduler time includes MD/MM device
+work outside CPU execution (transport, queues, codec draining and audio plumbing).
+The small difference between their sum and `deviceNanoseconds` is work outside
+the MD/MM hardware phase scopes plus measurement boundaries. Summary records also
+provide totals and per-callback maxima for each phase.
 
 Snapshots use relaxed atomics and are approximate while recording/resetting.
 Individual trace entries have synchronized ownership and are not torn. Measuring
