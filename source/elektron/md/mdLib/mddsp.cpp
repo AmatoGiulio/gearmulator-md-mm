@@ -25,6 +25,13 @@ namespace md
 		constexpr TWord g_trapFillEnd = 0x020000;
 		constexpr TWord g_fillInstr   = 0x00000C;	// RTS
 
+		synthLib::RealtimeInstrumentation::DevicePhase dspProfilePhase(
+			const uint32_t _index)
+		{
+			return _index == 0
+				? synthLib::RealtimeInstrumentation::DevicePhase::Dsp1Mixer
+				: synthLib::RealtimeInstrumentation::DevicePhase::Dsp2Producer;
+		}
 	}
 
 	Dsp::Dsp(Hardware& _hw, mc68k::Hdi08& _hdiUc, const uint32_t _index)
@@ -271,11 +278,22 @@ namespace md
 			const uint64_t startCycle = m_dsp.getCycles();
 			const uint64_t clampStop = startCycle
 				+ schedInlineClamp(m_hardware.getModel());
-			while(!hdi08().hasTX()
-				&& (!m_hardware.isMonomachine() || (!m_timedHostRx.pending() && m_hdiUC.canReceiveData()))
-				&& (hdi08().hostCommandBusy() || dsp().hasPendingInterrupts())
-				&& m_dsp.getCycles() < clampStop)
-				m_dsp.exec();
+			const auto needsInlineRun = [this, clampStop]
+			{
+				return !hdi08().hasTX()
+					&& (!m_hardware.isMonomachine()
+						|| (!m_timedHostRx.pending() && m_hdiUC.canReceiveData()))
+					&& (hdi08().hostCommandBusy() || dsp().hasPendingInterrupts())
+					&& m_dsp.getCycles() < clampStop;
+			};
+			if(needsInlineRun())
+			{
+				synthLib::RealtimeInstrumentation::DevicePhaseScope dspPhase(
+					dspProfilePhase(m_index));
+				do
+					m_dsp.exec();
+				while(needsInlineRun());
+			}
 #if MD_TRANSPORT_DIAGNOSTICS
 			const bool workComplete = hdi08().hasTX()
 				|| (m_hardware.isMonomachine()
@@ -311,8 +329,14 @@ namespace md
 		const uint64_t startCycle = m_dsp.getCycles();
 		const uint64_t clampStop = startCycle
 			+ schedInlineClamp(m_hardware.getModel());
-		while(hdi08().hasRXData() && m_dsp.getCycles() < clampStop)
-			m_dsp.exec();
+		if(hdi08().hasRXData() && m_dsp.getCycles() < clampStop)
+		{
+			synthLib::RealtimeInstrumentation::DevicePhaseScope dspPhase(
+				dspProfilePhase(m_index));
+			do
+				m_dsp.exec();
+			while(hdi08().hasRXData() && m_dsp.getCycles() < clampStop);
+		}
 #if MD_TRANSPORT_DIAGNOSTICS
 		m_hardware.recordInlineHdi08Run(m_index, startCycle, clampStop,
 			!hdi08().hasRXData());
@@ -331,8 +355,12 @@ namespace md
 		const uint64_t startCycle = m_dsp.getCycles();
 		const uint64_t clampStop = startCycle
 			+ schedInlineClamp(m_hardware.getModel());
-		while(hdi08().hostCommandBusy() && m_dsp.getCycles() < clampStop)
-			m_dsp.exec();
+		{
+			synthLib::RealtimeInstrumentation::DevicePhaseScope dspPhase(
+				dspProfilePhase(m_index));
+			while(hdi08().hostCommandBusy() && m_dsp.getCycles() < clampStop)
+				m_dsp.exec();
+		}
 #if MD_TRANSPORT_DIAGNOSTICS
 		m_hardware.recordInlineHdi08Run(m_index, startCycle, clampStop,
 			!hdi08().hostCommandBusy());
@@ -367,8 +395,14 @@ namespace md
 			const uint64_t startCycle = m_dsp.getCycles();
 			const uint64_t clampStop = startCycle
 				+ schedInlineClamp(m_hardware.getModel()) * 4;
-			while(!hdi08().rxData().empty() && m_dsp.getCycles() < clampStop)
-				m_dsp.exec();
+			if(!hdi08().rxData().empty() && m_dsp.getCycles() < clampStop)
+			{
+				synthLib::RealtimeInstrumentation::DevicePhaseScope dspPhase(
+					dspProfilePhase(m_index));
+				do
+					m_dsp.exec();
+				while(!hdi08().rxData().empty() && m_dsp.getCycles() < clampStop);
+			}
 #if MD_TRANSPORT_DIAGNOSTICS
 			m_hardware.recordInlineHdi08Run(m_index, startCycle, clampStop,
 				hdi08().rxData().empty());
