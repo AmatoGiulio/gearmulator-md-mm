@@ -25,6 +25,11 @@ namespace synthLib
 		uint64_t budgetNanoseconds = 0, interCallbackNanoseconds = 0;
 		uint64_t synthNanoseconds = 0, lockWaitNanoseconds = 0;
 		uint64_t resamplerNanoseconds = 0, deviceNanoseconds = 0;
+		// Exclusive emulator timings for the MD/MM single-thread machine. Nested
+		// processor scopes pause their parent, so these fields do not double-count
+		// DSP catch-up performed from a ColdFire or sibling-DSP callback.
+		uint64_t emulatorSchedulerNanoseconds = 0, emulatorUcNanoseconds = 0;
+		uint64_t emulatorDsp1Nanoseconds = 0, emulatorDsp2Nanoseconds = 0;
 		uint64_t deferredNanoseconds = 0, liveJitCompilations = 0, deferredJitCompilations = 0;
 		uint32_t frames = 0, outputBuses = 0, outputChannels = 0;
 		uint32_t midiEvents = 0, midiBytes = 0, deviceSampleRate = 0;
@@ -63,6 +68,11 @@ namespace synthLib
 		uint64_t resamplingActiveCallbackCount = 0;
 		uint64_t deviceProcessNanoseconds = 0;
 		uint64_t deviceProcessMaxNanoseconds = 0;
+		uint64_t emulatorProfiledCallbackCount = 0;
+		uint64_t emulatorSchedulerNanoseconds = 0, emulatorSchedulerMaxNanoseconds = 0;
+		uint64_t emulatorUcNanoseconds = 0, emulatorUcMaxNanoseconds = 0;
+		uint64_t emulatorDsp1Nanoseconds = 0, emulatorDsp1MaxNanoseconds = 0;
+		uint64_t emulatorDsp2Nanoseconds = 0, emulatorDsp2MaxNanoseconds = 0;
 		uint64_t jitCompilationCount = 0;
 		uint64_t liveJitCompilationCount = 0;
 		uint64_t deferredCandidateJitCompilationCount = 0;
@@ -88,6 +98,30 @@ namespace synthLib
 	class RealtimeInstrumentation final
 	{
 	public:
+		enum class DevicePhase : uint8_t
+		{
+			None,
+			Scheduler,
+			Microcontroller,
+			Dsp1Mixer,
+			Dsp2Producer
+		};
+
+		// Exclusive, nested phase attribution inside an active host callback.
+		// When diagnostics are disabled or no host callback is active this is a
+		// predictable no-op and does not read the clock.
+		class DevicePhaseScope final
+		{
+		public:
+			explicit DevicePhaseScope(DevicePhase _phase) noexcept;
+			~DevicePhaseScope();
+			DevicePhaseScope(const DevicePhaseScope&) = delete;
+			DevicePhaseScope& operator=(const DevicePhaseScope&) = delete;
+		private:
+			DevicePhase m_previous = DevicePhase::None;
+			bool m_active = false;
+		};
+
 		class CallbackScope final
 		{
 		public:
@@ -220,6 +254,15 @@ namespace synthLib
 		std::atomic<uint64_t> m_resamplingActiveCallbackCount{0};
 		std::atomic<uint64_t> m_deviceProcessNanoseconds{0};
 		std::atomic<uint64_t> m_deviceProcessMaxNanoseconds{0};
+		std::atomic<uint64_t> m_emulatorProfiledCallbackCount{0};
+		std::atomic<uint64_t> m_emulatorSchedulerNanoseconds{0};
+		std::atomic<uint64_t> m_emulatorSchedulerMaxNanoseconds{0};
+		std::atomic<uint64_t> m_emulatorUcNanoseconds{0};
+		std::atomic<uint64_t> m_emulatorUcMaxNanoseconds{0};
+		std::atomic<uint64_t> m_emulatorDsp1Nanoseconds{0};
+		std::atomic<uint64_t> m_emulatorDsp1MaxNanoseconds{0};
+		std::atomic<uint64_t> m_emulatorDsp2Nanoseconds{0};
+		std::atomic<uint64_t> m_emulatorDsp2MaxNanoseconds{0};
 		std::atomic<uint64_t> m_jitCompilationCount{0};
 		std::atomic<uint64_t> m_liveJitCompilationCount{0};
 		std::atomic<uint64_t> m_deferredCandidateJitCompilationCount{0};
