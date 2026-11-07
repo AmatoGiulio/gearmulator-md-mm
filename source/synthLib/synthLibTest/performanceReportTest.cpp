@@ -324,6 +324,11 @@ namespace
 		{
 			RI::CallbackScope callback(ri, 64, 48000);
 			RI::recordCurrentCallbackJitCompilation();
+			{
+				RI::DevicePhaseScope scheduler(RI::DevicePhase::Scheduler);
+				RI::DevicePhaseScope uc(RI::DevicePhase::Microcontroller);
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			}
 		}
 		report.stop();
 		require(!ri.isEnabled() && report.status() == Report::Status::Stopped, "stop left recording enabled");
@@ -336,6 +341,8 @@ namespace
 			"report context is not JSON escaped");
 		require(content.find("\"type\":\"callback\"") != std::string::npos
 			&& content.find("\"liveJitCompilations\":1") != std::string::npos
+			&& content.find("\"emulatorUcNanoseconds\":") != std::string::npos
+			&& content.find("\"emulatorProfiledCallbackCount\":") != std::string::npos
 			&& content.find("\"reason\":\"stopped\"") != std::string::npos,
 			"final report is missing captured work or stop reason");
 		report.start(path + "/missing/report.jsonl", {});
