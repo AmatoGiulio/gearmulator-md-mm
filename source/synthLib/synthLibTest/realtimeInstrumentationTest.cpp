@@ -59,6 +59,11 @@ int main()
 						synthLib::RealtimeInstrumentation::DevicePhase::Dsp1Mixer);
 					std::this_thread::sleep_for(std::chrono::milliseconds(1));
 				}
+				{
+					synthLib::RealtimeInstrumentation::DevicePhaseScope dsp(
+						synthLib::RealtimeInstrumentation::DevicePhase::Dsp2Producer);
+					std::this_thread::sleep_for(std::chrono::milliseconds(1));
+				}
 			}
 		}
 		{
@@ -94,7 +99,7 @@ int main()
 		&& snapshot.emulatorSchedulerNanoseconds > 0
 		&& snapshot.emulatorUcNanoseconds > 0
 		&& snapshot.emulatorDsp1Nanoseconds > 0
-		&& snapshot.emulatorDsp2Nanoseconds == 0,
+		&& snapshot.emulatorDsp2Nanoseconds > 0,
 		"exclusive emulator phase attribution is wrong");
 	require(snapshot.deferredDualMachineCallbackCount == 1
 		&& snapshot.deferredCandidateAdvanceCount == 1
