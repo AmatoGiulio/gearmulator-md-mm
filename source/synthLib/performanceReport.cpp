@@ -85,6 +85,11 @@ namespace synthLib
 		FIELD(synthProcessLockWaitMaxNanoseconds); FIELD(resamplerCallCount);
 		FIELD(resamplerNanoseconds); FIELD(resamplerMaxNanoseconds); FIELD(resamplerHostFrames);
 		FIELD(resamplingActiveCallbackCount); FIELD(deviceProcessNanoseconds); FIELD(deviceProcessMaxNanoseconds);
+		FIELD(emulatorProfiledCallbackCount);
+		FIELD(emulatorSchedulerNanoseconds); FIELD(emulatorSchedulerMaxNanoseconds);
+		FIELD(emulatorUcNanoseconds); FIELD(emulatorUcMaxNanoseconds);
+		FIELD(emulatorDsp1Nanoseconds); FIELD(emulatorDsp1MaxNanoseconds);
+		FIELD(emulatorDsp2Nanoseconds); FIELD(emulatorDsp2MaxNanoseconds);
 		FIELD(jitCompilationCount); FIELD(liveJitCompilationCount); FIELD(deferredCandidateJitCompilationCount);
 		FIELD(callbacksWithJitCompilation); FIELD(deferredDualMachineCallbackCount);
 		FIELD(deferredCandidateAdvanceCount); FIELD(deferredCandidateFrames);
@@ -107,7 +112,10 @@ namespace synthLib
 #define FIELD(name) out << ",\"" #name "\":" << c.name
 		FIELD(index); FIELD(startNanoseconds); FIELD(durationNanoseconds); FIELD(budgetNanoseconds);
 		FIELD(interCallbackNanoseconds); FIELD(synthNanoseconds); FIELD(lockWaitNanoseconds);
-		FIELD(resamplerNanoseconds); FIELD(deviceNanoseconds); FIELD(deferredNanoseconds);
+		FIELD(resamplerNanoseconds); FIELD(deviceNanoseconds);
+		FIELD(emulatorSchedulerNanoseconds); FIELD(emulatorUcNanoseconds);
+		FIELD(emulatorDsp1Nanoseconds); FIELD(emulatorDsp2Nanoseconds);
+		FIELD(deferredNanoseconds);
 		FIELD(liveJitCompilations); FIELD(deferredJitCompilations); FIELD(frames); FIELD(sampleRate);
 		FIELD(deviceSampleRate); FIELD(resamplerMode); FIELD(dspClockPercent);
 		FIELD(outputBuses); FIELD(outputChannels); FIELD(midiEvents); FIELD(midiBytes);
