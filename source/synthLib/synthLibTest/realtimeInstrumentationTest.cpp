@@ -47,6 +47,21 @@ int main()
 		callback.setActiveOutputLayout(3, 6);
 		synthLib::RealtimeInstrumentation::recordCurrentCallbackJitCompilation();
 		{
+			synthLib::RealtimeInstrumentation::DevicePhaseScope scheduler(
+				synthLib::RealtimeInstrumentation::DevicePhase::Scheduler);
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			{
+				synthLib::RealtimeInstrumentation::DevicePhaseScope uc(
+					synthLib::RealtimeInstrumentation::DevicePhase::Microcontroller);
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+				{
+					synthLib::RealtimeInstrumentation::DevicePhaseScope dsp(
+						synthLib::RealtimeInstrumentation::DevicePhase::Dsp1Mixer);
+					std::this_thread::sleep_for(std::chrono::milliseconds(1));
+				}
+			}
+		}
+		{
 			synthLib::RealtimeInstrumentation::DeferredCandidateScope candidate(64);
 			synthLib::RealtimeInstrumentation::recordCurrentCallbackJitCompilation();
 			// An empty scope can span zero clock ticks on fast/coarse-clock hosts.
@@ -75,6 +90,12 @@ int main()
 		&& snapshot.deferredCandidateJitCompilationCount == 1
 		&& snapshot.callbacksWithJitCompilation == 1,
 		"callback JIT attribution is wrong");
+	require(snapshot.emulatorProfiledCallbackCount == 1
+		&& snapshot.emulatorSchedulerNanoseconds > 0
+		&& snapshot.emulatorUcNanoseconds > 0
+		&& snapshot.emulatorDsp1Nanoseconds > 0
+		&& snapshot.emulatorDsp2Nanoseconds == 0,
+		"exclusive emulator phase attribution is wrong");
 	require(snapshot.deferredDualMachineCallbackCount == 1
 		&& snapshot.deferredCandidateAdvanceCount == 1
 		&& snapshot.deferredCandidateFrames == 64
