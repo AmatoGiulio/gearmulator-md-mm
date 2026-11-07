@@ -29,11 +29,37 @@ namespace
 	{
 		synthLib::RealtimeInstrumentation* owner = nullptr;
 		synthLib::RealtimeSlowCallback callback;
+		synthLib::RealtimeInstrumentation::DevicePhase devicePhase =
+			synthLib::RealtimeInstrumentation::DevicePhase::None;
+		uint64_t devicePhaseStartNanoseconds = 0;
 		bool dualMachine = false;
 		bool candidateRole = false;
 	};
 
 	thread_local CallbackContext g_callbackContext;
+
+	void addDevicePhaseNanoseconds(const synthLib::RealtimeInstrumentation::DevicePhase _phase,
+		const uint64_t _nanoseconds) noexcept
+	{
+		using Phase = synthLib::RealtimeInstrumentation::DevicePhase;
+		switch(_phase)
+		{
+		case Phase::Scheduler:
+			g_callbackContext.callback.emulatorSchedulerNanoseconds += _nanoseconds;
+			break;
+		case Phase::Microcontroller:
+			g_callbackContext.callback.emulatorUcNanoseconds += _nanoseconds;
+			break;
+		case Phase::Dsp1Mixer:
+			g_callbackContext.callback.emulatorDsp1Nanoseconds += _nanoseconds;
+			break;
+		case Phase::Dsp2Producer:
+			g_callbackContext.callback.emulatorDsp2Nanoseconds += _nanoseconds;
+			break;
+		case Phase::None:
+			break;
+		}
+	}
 
 	bool enabledFromEnvironment() noexcept
 	{
@@ -49,6 +75,41 @@ namespace synthLib
 	RealtimeInstrumentation::RealtimeInstrumentation() noexcept
 		: m_enabled(enabledFromEnvironment())
 	{
+	}
+
+	RealtimeInstrumentation::DevicePhaseScope::DevicePhaseScope(
+		const DevicePhase _phase) noexcept
+	{
+		auto* const owner = g_callbackContext.owner;
+		if(!owner || !owner->isEnabled() || _phase == DevicePhase::None)
+			return;
+		const auto now = nowNanoseconds();
+		if(g_callbackContext.devicePhase != DevicePhase::None
+			&& g_callbackContext.devicePhaseStartNanoseconds)
+		{
+			addDevicePhaseNanoseconds(g_callbackContext.devicePhase,
+				now - g_callbackContext.devicePhaseStartNanoseconds);
+		}
+		m_previous = g_callbackContext.devicePhase;
+		g_callbackContext.devicePhase = _phase;
+		g_callbackContext.devicePhaseStartNanoseconds = now;
+		m_active = true;
+	}
+
+	RealtimeInstrumentation::DevicePhaseScope::~DevicePhaseScope()
+	{
+		if(!m_active)
+			return;
+		const auto now = nowNanoseconds();
+		if(g_callbackContext.devicePhase != DevicePhase::None
+			&& g_callbackContext.devicePhaseStartNanoseconds)
+		{
+			addDevicePhaseNanoseconds(g_callbackContext.devicePhase,
+				now - g_callbackContext.devicePhaseStartNanoseconds);
+		}
+		g_callbackContext.devicePhase = m_previous;
+		g_callbackContext.devicePhaseStartNanoseconds =
+			m_previous == DevicePhase::None ? 0 : now;
 	}
 
 	void RealtimeInstrumentation::setEnabled(const bool _enabled) noexcept
@@ -83,6 +144,15 @@ namespace synthLib
 		m_resamplingActiveCallbackCount.store(0, std::memory_order_relaxed);
 		m_deviceProcessNanoseconds.store(0, std::memory_order_relaxed);
 		m_deviceProcessMaxNanoseconds.store(0, std::memory_order_relaxed);
+		m_emulatorProfiledCallbackCount.store(0, std::memory_order_relaxed);
+		m_emulatorSchedulerNanoseconds.store(0, std::memory_order_relaxed);
+		m_emulatorSchedulerMaxNanoseconds.store(0, std::memory_order_relaxed);
+		m_emulatorUcNanoseconds.store(0, std::memory_order_relaxed);
+		m_emulatorUcMaxNanoseconds.store(0, std::memory_order_relaxed);
+		m_emulatorDsp1Nanoseconds.store(0, std::memory_order_relaxed);
+		m_emulatorDsp1MaxNanoseconds.store(0, std::memory_order_relaxed);
+		m_emulatorDsp2Nanoseconds.store(0, std::memory_order_relaxed);
+		m_emulatorDsp2MaxNanoseconds.store(0, std::memory_order_relaxed);
 		m_jitCompilationCount.store(0, std::memory_order_relaxed);
 		m_liveJitCompilationCount.store(0, std::memory_order_relaxed);
 		m_deferredCandidateJitCompilationCount.store(0, std::memory_order_relaxed);
@@ -127,6 +197,15 @@ namespace synthLib
 		result.resamplingActiveCallbackCount = m_resamplingActiveCallbackCount.load(std::memory_order_relaxed);
 		result.deviceProcessNanoseconds = m_deviceProcessNanoseconds.load(std::memory_order_relaxed);
 		result.deviceProcessMaxNanoseconds = m_deviceProcessMaxNanoseconds.load(std::memory_order_relaxed);
+		result.emulatorProfiledCallbackCount = m_emulatorProfiledCallbackCount.load(std::memory_order_relaxed);
+		result.emulatorSchedulerNanoseconds = m_emulatorSchedulerNanoseconds.load(std::memory_order_relaxed);
+		result.emulatorSchedulerMaxNanoseconds = m_emulatorSchedulerMaxNanoseconds.load(std::memory_order_relaxed);
+		result.emulatorUcNanoseconds = m_emulatorUcNanoseconds.load(std::memory_order_relaxed);
+		result.emulatorUcMaxNanoseconds = m_emulatorUcMaxNanoseconds.load(std::memory_order_relaxed);
+		result.emulatorDsp1Nanoseconds = m_emulatorDsp1Nanoseconds.load(std::memory_order_relaxed);
+		result.emulatorDsp1MaxNanoseconds = m_emulatorDsp1MaxNanoseconds.load(std::memory_order_relaxed);
+		result.emulatorDsp2Nanoseconds = m_emulatorDsp2Nanoseconds.load(std::memory_order_relaxed);
+		result.emulatorDsp2MaxNanoseconds = m_emulatorDsp2MaxNanoseconds.load(std::memory_order_relaxed);
 		result.jitCompilationCount = m_jitCompilationCount.load(std::memory_order_relaxed);
 		result.liveJitCompilationCount = m_liveJitCompilationCount.load(std::memory_order_relaxed);
 		result.deferredCandidateJitCompilationCount = m_deferredCandidateJitCompilationCount.load(std::memory_order_relaxed);
@@ -230,6 +309,26 @@ namespace synthLib
 			m_deferredDualMachineCallbackCount.fetch_add(1, std::memory_order_relaxed);
 		if(_callback.bypassed)
 			m_bypassedCallbackCount.fetch_add(1, std::memory_order_relaxed);
+		const auto emulatorNanoseconds = _callback.emulatorSchedulerNanoseconds
+			+ _callback.emulatorUcNanoseconds + _callback.emulatorDsp1Nanoseconds
+			+ _callback.emulatorDsp2Nanoseconds;
+		if(emulatorNanoseconds)
+		{
+			m_emulatorProfiledCallbackCount.fetch_add(1, std::memory_order_relaxed);
+			m_emulatorSchedulerNanoseconds.fetch_add(
+				_callback.emulatorSchedulerNanoseconds, std::memory_order_relaxed);
+			m_emulatorUcNanoseconds.fetch_add(
+				_callback.emulatorUcNanoseconds, std::memory_order_relaxed);
+			m_emulatorDsp1Nanoseconds.fetch_add(
+				_callback.emulatorDsp1Nanoseconds, std::memory_order_relaxed);
+			m_emulatorDsp2Nanoseconds.fetch_add(
+				_callback.emulatorDsp2Nanoseconds, std::memory_order_relaxed);
+			updateMaximum(m_emulatorSchedulerMaxNanoseconds,
+				_callback.emulatorSchedulerNanoseconds);
+			updateMaximum(m_emulatorUcMaxNanoseconds, _callback.emulatorUcNanoseconds);
+			updateMaximum(m_emulatorDsp1MaxNanoseconds, _callback.emulatorDsp1Nanoseconds);
+			updateMaximum(m_emulatorDsp2MaxNanoseconds, _callback.emulatorDsp2Nanoseconds);
+		}
 		if(_callback.outputBuses > 1)
 			m_callbacksWithAuxOutputBuses.fetch_add(1, std::memory_order_relaxed);
 		m_latestActiveOutputBuses.store(_callback.outputBuses, std::memory_order_relaxed);
