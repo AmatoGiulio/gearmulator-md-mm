@@ -1539,10 +1539,20 @@ namespace md
 		// catch-up loops are how a DSP outruns the UC by thousands of words in the first place
 		// (see the schedStep backpressure comment). MD path untouched.
 		const bool s_mmBp = isMonomachine();
-		while(d.dsp().getCycles() < targetCyc && d.dsp().getCycles() < clampStop
-			&& (!s_mmBp
-				|| d.hostTxBacklog() <= policy.hostTransmitBackpressureThresholdWords))
-			d.dsp().exec();
+		if(!s_mmBp && m_schedBoundedJit)
+		{
+			// MD has no host-TX backpressure gate in this catch-up path, so the
+			// bounded dispatcher is semantically equivalent to the per-block loop
+			// while avoiding repeated trampoline entry/exit on this hot path.
+			d.dsp().execUntilCycles(std::min(targetCyc, clampStop));
+		}
+		else
+		{
+			while(d.dsp().getCycles() < targetCyc && d.dsp().getCycles() < clampStop
+				&& (!s_mmBp
+					|| d.hostTxBacklog() <= policy.hostTransmitBackpressureThresholdWords))
+				d.dsp().exec();
+		}
 		MD_TRANSPORT_RECORD(const auto executed = d.dsp().getCycles() - startCyc;
 			score.executedCycles += executed;
 			score.maximumExecutedCycles = std::max(score.maximumExecutedCycles, executed);
@@ -1608,10 +1618,20 @@ namespace md
 			score.maximumRequestedCycles = std::max(score.maximumRequestedCycles, requested););
 		m_schedInLinkDelivery = true;
 		const bool bpGate = isMonomachine();
-		while(d.dsp().getCycles() < targetCyc && d.dsp().getCycles() < clampStop
-			&& (!bpGate
-				|| d.hostTxBacklog() <= policy.hostTransmitBackpressureThresholdWords))
-			d.dsp().exec();
+		if(!bpGate && m_schedBoundedJit)
+		{
+			// Same optimization as the ColdFire catch-up above. The MD path has no
+			// per-block backpressure predicate, and execUntilCycles preserves the
+			// existing peripheral/interrupt checks at each cached block boundary.
+			d.dsp().execUntilCycles(std::min(targetCyc, clampStop));
+		}
+		else
+		{
+			while(d.dsp().getCycles() < targetCyc && d.dsp().getCycles() < clampStop
+				&& (!bpGate
+					|| d.hostTxBacklog() <= policy.hostTransmitBackpressureThresholdWords))
+				d.dsp().exec();
+		}
 		m_schedInLinkDelivery = false;
 		MD_TRANSPORT_RECORD(const auto executed = d.dsp().getCycles() - startCyc;
 			score.executedCycles += executed;
